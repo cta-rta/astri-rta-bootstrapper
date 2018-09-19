@@ -42,8 +42,15 @@ def poollingDirectory(dir, currFiles):
 
 
 script_path = os.path.dirname(os.path.abspath(__file__))
+
 folder_to_watch = "EVT2"
 path_to_watch = "./"+folder_to_watch
+
+# start the ASTRI pipeline
+astri_path = "../astripipe_v0.2.5/astripipe/"
+astri_bootstrapper_path = script_path
+astri_configfile_model = astri_path+"astriana_gaussfit.par_model"
+astri_configfile = astri_path+"astriana_gaussfit.par"
 
 
 # Deleting all content
@@ -114,11 +121,7 @@ while 1:
             print("\n --> All files are present:\n  EVT2: {}\n  GTI:  {}\n  IRF:  {}\n\n".format(evt2_filename,gti_filename,irf_filename))
 
 
-            # start the ASTRI pipeline
-            astri_path = "/home/rt/ASTRI/astripipe_v0.2.5/astripipe/"
-            astri_bootstrapper_path = "/home/rt/astri_bootstrapper"
-            astri_configfile_model = astri_path+"astriana_gaussfit.par_model"
-            astri_configfile = astri_path+"astriana_gaussfit.par"
+
 
             input_files_path = script_path+'/'+folder_to_watch+'/'
 
