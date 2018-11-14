@@ -1,7 +1,9 @@
 import configparser
-from ScriptExecutor import *
+from os import putenv, system
+from ScriptExecutor import ScriptExecutorPy, ScriptExecutorCxx
 
 print("""
+--------------------------------------------------------------------------------
                 __
                / _)  Pipeline Boostrapper
         .-^^^-/ /
@@ -12,17 +14,30 @@ print("""
 
 config = configparser.ConfigParser()
 config.read('conf.ini')
-
-if config['GENERAL'].getboolean('debug'):
-    debug = True
-
 sections = config.sections()
 sections.remove('GENERAL')
+sections.remove('ENVIRONMENT')
+print("Scripts:\n{}".format(sections))
 
-print(sections)
+################################################################################
+# Define environment variables
+#
+envVars = config.options('ENVIRONMENT')
+print("\nEnvironment variables:")
+for varName in envVars:
+    varNameUpper = varName.upper()
+    varValue = config.get('ENVIRONMENT',varNameUpper)
+    putenv(varNameUpper, varValue)
+    system("echo "+varNameUpper+"=$"+varValue)
 
+print("""
+--------------------------------------------------------------------------------
+""")
+
+################################################################################
+# Executors
+#
 executors = []
-
 
 for sectionName in sections:
     if config[sectionName]['language'] == 'c++':
