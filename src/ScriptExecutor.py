@@ -23,16 +23,16 @@
 import configparser
 from abc import ABC, abstractmethod
 from os.path import isdir
-from os import listdir, remove, system
+from os import listdir, system
 from os.path import join, exists
 from time import sleep, gmtime, strftime
-from threading import Thread, Semaphore
+from threading import Thread
 import subprocess
 import logging
+from ast import literal_eval
 
 from .ExecutorUtils import ExecutorUtils as EU
 
-screenlock = Semaphore(value=1)
 
 class ScriptExecutorBase(ABC):
 
@@ -45,17 +45,17 @@ class ScriptExecutorBase(ABC):
         # The string-ID of the executor
         self.executorName = config[iniSectionName]['name']
 
-        # Directories..
+        # Directories
         self.inputDir = config['GENERAL']['dataPath']+'/'+config[iniSectionName]['inputDir']
         self.tempOutputDir = config['GENERAL']['tempOutputDir']+'/'+config[iniSectionName]['outputDir']    # do NOT invert tempOutputDir and outputDir!
         self.outputDir = config['GENERAL']['dataPath']+'/'+config[iniSectionName]['outputDir']
 
         # Filenames
-        self.outputExt = config[iniSectionName]['outputExtension']
-        self.outputTempName = 'out.'+config[iniSectionName]['outputExtension']+'.tmp'
+        self.outputTempName = config[iniSectionName]['outputFilename']+'.tmp'
+        self.outputFilename = config[iniSectionName]['outputFilename']
         self.executableName = config[iniSectionName]['exeName']
 
-        # Actual files
+        # Existing files
         self.executable = config[iniSectionName]['exeDir']+'/'+config[iniSectionName]['exeName']
         self.parFile = config[iniSectionName]['parFileDir']+'/'+config[iniSectionName]['parFileName']
         self.parFileName = config[iniSectionName]['parFileName']
@@ -67,9 +67,15 @@ class ScriptExecutorBase(ABC):
         self.sleepSec = config[iniSectionName]['sleepSec']
 
         # Logging
-        logFile = join(config['GENERAL']['logDir'], config[iniSectionName]['name']+'_'+config['GENERAL']['logFilenameSuffix'])
+        logFile = join(config['GENERAL']['logDir'], config[iniSectionName]['name']+'_'+strftime("%Y-%m-%d_%H:%M:%S", gmtime())+'_log.txt')
         self.logger = self.setupLogger(config[iniSectionName]['name'], logFile)
 
+        # Env
+        try:
+            self.envVarsDict = literal_eval(config[iniSectionName]['envVars'])
+        except ValueError as ve:
+            self.LOG("ERROR {}!\nCheck [envVars] configuration file option.".format(ve), printOnConsole = True, addErrorDecorator = True)
+            exit()
 
         # Script input file management
         self.searchForExtsList = EU.splitToList(config[iniSectionName]['inputExtensions'])
@@ -106,7 +112,9 @@ class ScriptExecutorBase(ABC):
 
         while self.canContinue:
 
-            # Polling phase
+            #################
+            # Polling phase #
+            #################
             while not self.inputFilesFound and self.canContinue:
 
                 self.searchForInputFiles()
@@ -119,11 +127,10 @@ class ScriptExecutorBase(ABC):
 
 
 
-            # Script phase
-            toPrint = "[{} {}] All input files found. Script phase starts..".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()))
-            self.LOG(toPrint)
-
-            if not self.systemCall('cp '+self.parFile+' ./'): # Copy par file  -> create a function that move the par file and then check if the file is present
+            ####################
+            # Script run phase #
+            ####################
+            if not self.systemCall('cp '+self.parFile+' ./'): # Copy par file into the current dir
                 break
 
             if not self.systemCall('mkdir -p '+self.tempOutputDir): # Create temp folder for temporary output
@@ -132,18 +139,18 @@ class ScriptExecutorBase(ABC):
             if not self.executeScript(): # The output files are written in a temp directory
                 break
 
+            if not self.systemCall('mv '+join(self.tempOutputDir,self.outputTempName)+' '+join(self.outputDir, self.outputFilename)): # Move output file when the script finished
+                return False
 
-            # Clean phase
-            if not self.systemCall('rm '+self.parFileName):
+            if not self.systemCall('rm '+self.parFileName): # Remove the par
                 break
 
-            EU.cleanDirectory(self.inputDir)
-            EU.cleanDictionary(self.inputFiles)
+            EU.cleanDirectory(self.inputDir) # Remove the input files
+            EU.cleanDictionary(self.inputFiles) # Clean the input files dictionary
             self.inputFilesFound = False
 
 
-        toPrint = "[{} {}] Quitting..".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()))
-        self.LOG(toPrint, printOnConsole = True)
+        self.LOG("Quitting..", printOnConsole = True)
 
 
 
@@ -151,12 +158,12 @@ class ScriptExecutorBase(ABC):
     # Utility functions
     #
     # return (bool err,string command, string strout,string stderr)
-    def systemCall(self, command, logOutputOnFile = False):
-        completedProcess = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    def systemCall(self, command, logOutputOnFile = False, envVars = None):
+
+        completedProcess = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env = envVars)
 
         if logOutputOnFile:
-            toPrint = "\n\n\n[{} {}]\n{}".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()),completedProcess.stdout.decode("utf-8"))
-            self.LOG(toPrint)
+            self.LOG("{}".format(completedProcess.stdout.decode("utf-8")))
 
         if completedProcess.returncode == 1:
             return self.checkSystemCallOutput({ 'failed': True, 'script': completedProcess.args, 'stdout': completedProcess.stdout, 'stderr': completedProcess.stderr})
@@ -166,12 +173,12 @@ class ScriptExecutorBase(ABC):
 
     def checkSystemCallOutput(self, systemCallOutput):
         if systemCallOutput['failed']:
-            toPrint = "[{} {}]\nThe system call: {} has failed with error code 1.\nError: {}".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()), systemCallOutput['script'], systemCallOutput['stderr'].decode("utf-8"))
-            self.LOG( EU.getErrorString(toPrint), printOnConsole = True)
+            toPrint = "\nThe system call: {} has failed with error code 1.\nError: {}".format(systemCallOutput['script'], systemCallOutput['stderr'].decode("utf-8"))
+            self.LOG(toPrint, printOnConsole = True, addErrorDecorator = True)
             self.endJob()
             return False
         else:
-            self.LOG("[{} {}] System call executed: {}".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()), systemCallOutput['script']))
+            self.LOG("System call executed: {}".format(systemCallOutput['script']))
             return True
 
 
@@ -187,8 +194,7 @@ class ScriptExecutorBase(ABC):
                 if newFile:
                     self.inputFiles[ext] = join(self.inputDir, newFile)
 
-        toPrint = "[{} {}] {}".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()),self.inputFiles)
-        self.LOG(toPrint, printOnConsole = True)
+        self.LOG("{}".format(self.inputFiles), printOnConsole = True)
 
 
 
@@ -201,20 +207,20 @@ class ScriptExecutorBase(ABC):
 
     def checkFilesAndDirectories(self):
         if not isdir(self.inputDir):
-            toPrint = "\n[{}] ERROR!! the inputDir directory {} does not exist".format(self.executorName, self.inputDir)
-            self.LOG(toPrint, printOnConsole = True)
+            toPrint = "\nERROR!! the inputDir directory {} does not exist".format(self.inputDir)
+            self.LOG(toPrint, printOnConsole = True, addErrorDecorator = True)
             return False
         if not isdir(self.outputDir):
-            toPrint = "\n[{}] ERROR!! the outputDir directory {} does not exist".format(self.executorName, self.outputDir)
-            self.LOG(toPrint, printOnConsole = True)
+            toPrint = "\nERROR!! the outputDir directory {} does not exist".format(self.outputDir)
+            self.LOG(toPrint, printOnConsole = True, addErrorDecorator = True)
             return False
         if not exists(self.executable):
-            toPrint = "\n[{}] ERROR!! the executable {} does not exist".format(self.executorName, self.executable)
-            self.LOG(toPrint, printOnConsole = True)
+            toPrint = "\nERROR!! the executable {} does not exist".format(self.executable)
+            self.LOG(toPrint, printOnConsole = True, addErrorDecorator = True)
             return False
         if not exists(self.parFile):
-            toPrint = "\n[{}] ERROR!! the parFile {} does not exist".format(self.executorName, self.parFile)
-            self.LOG(toPrint, printOnConsole = True)
+            toPrint = "\nERROR!! the parFile {} does not exist".format(self.parFile)
+            self.LOG(toPrint, printOnConsole = True, addErrorDecorator = True)
             return False
         return True
 
@@ -224,13 +230,19 @@ class ScriptExecutorBase(ABC):
 
     def stopNotification(self):
         self.canContinue = False
-        self.LOG("[{} {}] Got stop notification from main.".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime())))
+        self.LOG("Got stop notification from main.")
 
     def printInfo(self):
-        toPrint = "\nMy name is: {} \nI watch the dir: {}\nI look for: {}\nI run: {}".format(self.executorName,self.inputDir,self.searchForExtsList,self.executable)
+        toPrint = "\nMy name is: {} \nI watch the dir: {}\nI look for: {}\nI run: {}\nI use {}".format(self.executorName,self.inputDir,self.searchForExtsList,self.executable, self.envVarsDict)
         self.LOG(toPrint, printOnConsole = True)
 
-    def LOG(self, string, printOnConsole = False):
+    def LOG(self, string, printOnConsole = False, addErrorDecorator = False):
+
+        string = "\n[{} {}] ".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()))+string
+
+        if addErrorDecorator:
+            string = EU.getErrorString(string)
+
         if printOnConsole or self.debug:
             print(string)
         self.logger.info(string)
@@ -245,20 +257,10 @@ class ScriptExecutorCxx(ScriptExecutorBase):
 
     def executeScript(self):
 
-        command = self.executable+' '+self.inputFiles['lv2a']+' '+self.tempOutputDir+'/'+self.outputTempName
+        self.LOG("---> SCRIPT {} IS RUNNING... PATIENCE.. <--".format(self.executableName), printOnConsole = True)
 
-        toPrint = "[{} {}] ---> SCRIPT {} IS RUNNING... PATIENCE.. <--".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()), self.executableName)
-        self.LOG(toPrint, printOnConsole = True)
-
-        res = self.systemCall(command, logOutputOnFile = True)
-
-        if not res:
-            return False
-
-
-        moveCommand = 'cp '+self.tempOutputDir+'/'+self.outputTempName+' '+self.outputDir
-
-        if not self.systemCall(moveCommand): # the files are moved into the output directory
+        command = self.executable+' '+self.inputFiles['lv2a']+' '+join(self.tempOutputDir,self.outputTempName)
+        if not self.systemCall(command, logOutputOnFile = True, envVars=self.envVarsDict):
             return False
 
         return True

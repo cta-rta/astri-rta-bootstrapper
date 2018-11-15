@@ -20,7 +20,8 @@
 
 #!/usr/bin/env python
 
-from os import listdir
+from os import listdir, remove
+from os.path import join
 
 class ExecutorUtils():
     @staticmethod

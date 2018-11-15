@@ -42,10 +42,10 @@ sections = config.sections()
 sections.remove('GENERAL')
 print("Scripts:\n{}".format(sections))
 
-
 print("""
 --------------------------------------------------------------------------------
 """)
+
 
 ################################################################################
 # Executors
@@ -65,6 +65,9 @@ for sectionName in sections:
     else:
         print("Language not supported")
         exit()
+
+input("\n --------> Press any key to start!")
+
 
 handles = {}
 for executorName, executorObj in executors.items():
