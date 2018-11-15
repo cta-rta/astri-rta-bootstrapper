@@ -3,3 +3,4 @@ old_bootstrapper.py
 __pycache__
 tmp/
 *.par
+*.txt

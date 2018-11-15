@@ -2,11 +2,13 @@ import configparser
 from abc import ABC, abstractmethod
 from os.path import isdir
 from os import listdir, remove, system
-from os.path import join
+from os.path import join, exists
 from time import sleep, gmtime, strftime
-import threading
-from threading import Semaphore
+from threading import Thread, Semaphore
 import subprocess
+import logging
+
+from ExecutorUtils import ExecutorUtils as EU
 
 screenlock = Semaphore(value=1)
 
@@ -16,44 +18,58 @@ class ScriptExecutorBase(ABC):
     def executeScript(self):
         pass
 
-    def __init__(self, config, iniSectionName):
+    def __init__(self, config, iniSectionName, communicationQueue):
 
+        # The string-ID of the executor
         self.executorName = config[iniSectionName]['name']
 
+        # Directories..
         self.inputDir = config['GENERAL']['dataPath']+'/'+config[iniSectionName]['inputDir']
         self.tempOutputDir = config['GENERAL']['tempOutputDir']+'/'+config[iniSectionName]['outputDir']    # do NOT invert tempOutputDir and outputDir!
         self.outputDir = config['GENERAL']['dataPath']+'/'+config[iniSectionName]['outputDir']
 
+        # Filenames
         self.outputExt = config[iniSectionName]['outputExtension']
         self.outputTempName = 'out.'+config[iniSectionName]['outputExtension']+'.tmp'
-
-        self.searchForExtsList = self.splitToList(config[iniSectionName]['inputExtensions'])
-
         self.executableName = config[iniSectionName]['exeName']
-        self.executable = config[iniSectionName]['exeDir']+'/'+config[iniSectionName]['exeName']
-        self.sleepSec = config[iniSectionName]['sleepSec']
-        self.debug = config.getboolean('GENERAL','debug')
-        self.parFileName = config[iniSectionName]['parFileName']
-        self.parFile = config[iniSectionName]['parFileDir']+'/'+config[iniSectionName]['parFileName']
-        self.canContinue = True
-        self.inputFilesFound = False
 
-        # Dictionary object -> { extension: filepath, ..  }
-        self.inputFiles = {}
+        # Actual files
+        self.executable = config[iniSectionName]['exeDir']+'/'+config[iniSectionName]['exeName']
+        self.parFile = config[iniSectionName]['parFileDir']+'/'+config[iniSectionName]['parFileName']
+        self.parFileName = config[iniSectionName]['parFileName']
+
+        # Debugging
+        self.debug = config.getboolean('GENERAL','debug')
+
+        # Polling sleep
+        self.sleepSec = config[iniSectionName]['sleepSec']
+
+        # Logging
+        logFile = join(config['GENERAL']['logDir'], config[iniSectionName]['name']+'_'+config['GENERAL']['logFilenameSuffix'])
+        self.logger = self.setupLogger(config[iniSectionName]['name'], logFile)
+
+
+        # Script input file management
+        self.searchForExtsList = EU.splitToList(config[iniSectionName]['inputExtensions'])
+        self.inputFiles = {} # Those are the files searched by the executor to run the script. Dictionary -> { extension: filepath, ..  }
         for ext in self.searchForExtsList:
             self.inputFiles[ext] = None
+        self.inputFilesFound = False
 
-        print("\nExecutor started! Info:")
+
+        # Communication queue in order to stop the executors
+        self.commQueue = communicationQueue
+        self.canContinue = True
+
+        # Starting output
         self.printInfo()
-
-        if not isdir(self.inputDir):
-            print("\n[{}] ERROR!! the directory {} does not exist".format(self.executorName, self.inputDir))
-            exit()
 
 
     def threaded(fn):
         def wrapper(*args, **kwargs):
-            threading.Thread(target=fn, args=args, kwargs=kwargs).start()
+            thread = Thread(target=fn, args=args, kwargs=kwargs)
+            thread.start()
+            return thread
         return wrapper
 
     ################################################################################
@@ -61,125 +77,169 @@ class ScriptExecutorBase(ABC):
     #
     @threaded
     def START_WORK(self):
+
+        # check
+        if not self.checkFilesAndDirectories():
+            self.endJob()
+
         while self.canContinue:
 
             # Polling phase
-            while not self.inputFilesFound:
-                self.searchForInputFiles()
-                self.inputFilesFound = self.isInputComplete()
+            while not self.inputFilesFound and self.canContinue:
 
-            screenlock.acquire()
+                self.searchForInputFiles()
+
+                self.inputFilesFound = EU.isDictionaryAllSet(self.inputFiles)
+
+
+            if not self.canContinue:
+                break
+
+
 
             # Script phase
-            system('cp '+self.parFile+' ./') # Copy par file  -> create a function that move the par file and then check if the file is present
-            system('mkdir -p '+self.tempOutputDir) # Create temp folder for temporary output
+            toPrint = "[{} {}] All input files found. Script phase starts..".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()))
+            self.LOG(toPrint)
 
-            self.executeScript() # The output files are written in a temp directory
+            if not self.systemCall('cp '+self.parFile+' ./'): # Copy par file  -> create a function that move the par file and then check if the file is present
+                break
+
+            if not self.systemCall('mkdir -p '+self.tempOutputDir): # Create temp folder for temporary output
+                break
+
+            if not self.executeScript(): # The output files are written in a temp directory
+                break
 
 
             # Clean phase
-            system('rm '+self.parFileName)
-            self.cleanDirectory(self.inputDir)
-            self.cleanDictionary()
+            if not self.systemCall('rm '+self.parFileName):
+                break
+
+            EU.cleanDirectory(self.inputDir)
+            EU.cleanDictionary(self.inputFiles)
             self.inputFilesFound = False
 
-            screenlock.release()
 
-
-            """
-            TODO
-
-            Errori:
-            /home/cta/Baroncelli_development/ASTRI_DL2/astrirta_install/bin/astrireco_arr: /home/cta/Baroncelli_development/ASTRI_DL2/astrirta_install/bin/astrireco_arr: cannot execute binary file
-            cp: impossibile eseguire stat di "/home/cta/Baroncelli_development/astri-rta-bootstrapper/tmp/lv2b.out/out.lv2b.tmp": File o directory non esistente
-
-            Usare subprocess per catturare gli errori e creare una funzione wrapper per le system calls
-            """
+        toPrint = "[{} {}] Quitting..".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()))
+        self.LOG(toPrint, printOnConsole = True)
 
 
 
     ###########################################################################
     # Utility functions
     #
-    def printInfo(self):
-        print("My name is: {} \nI watch the dir: {}\nI look for: {}\nI run: {}".format(self.executorName,self.inputDir,self.searchForExtsList,self.executable))
+    # return (bool err,string command, string strout,string stderr)
+    def systemCall(self, command, logOutputOnFile = False):
+        completedProcess = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
+        if logOutputOnFile:
+            toPrint = "\n\n\n[{} {}]\n{}".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()),completedProcess.stdout.decode("utf-8"))
+            self.LOG(toPrint)
+
+        if completedProcess.returncode == 1:
+            return self.checkSystemCallOutput({ 'failed': True, 'script': completedProcess.args, 'stdout': completedProcess.stdout, 'stderr': completedProcess.stderr})
+        else:
+            return self.checkSystemCallOutput({ 'failed': False, 'script': completedProcess.args, 'stdout': completedProcess.stdout, 'stderr': completedProcess.stderr})
+
+
+    def checkSystemCallOutput(self, systemCallOutput):
+        if systemCallOutput['failed']:
+            toPrint = "[{} {}]\nThe system call: {} has failed with error code 1.\nError: {}".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()), systemCallOutput['script'], systemCallOutput['stderr'].decode("utf-8"))
+            self.LOG( EU.getErrorString(toPrint), printOnConsole = True)
+            self.endJob()
+            return False
+        else:
+            self.LOG("[{} {}] System call executed: {}".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()), systemCallOutput['script']))
+            return True
+
+
+    # Polling
     def searchForInputFiles(self):
 
         sleep(int(self.sleepSec))
-
-        self.currentFiles = listdir (self.inputDir)
-
-        screenlock.acquire()
-        if self.debug:
-            print("\n[{} {}] Polled directory -> {}\nFiles: {}\nInput files needed: {}".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()), self.inputDir, self.currentFiles, self.inputFiles))
-        else:
-            print("\n[{} {}] {}".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()),self.inputFiles))
-        screenlock.release()
-
+        currentFiles = listdir(self.inputDir)
 
         for ext, val in self.inputFiles.items():
             if val is None:
-                self.inputFiles[ext] = self.searchFileWithExtension(self.currentFiles, ext)
+                newFile = EU.searchFileWithExtension(currentFiles, ext)
+                if newFile:
+                    self.inputFiles[ext] = join(self.inputDir, newFile)
 
-    def searchFileWithExtension(self, fileNames, extension):
-        for f in fileNames:
-            splitted = f.split('.')
-            f_ext = splitted[-1]
-            if extension == f_ext:
-                return f
-        return None
+        toPrint = "[{} {}] {}".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()),self.inputFiles)
+        self.LOG(toPrint, printOnConsole = True)
 
-    def splitToList(self, string):
-        if ',' in string:
-            return string.split(',')
-        else:
-            return [string]
 
-    def isInputComplete(self):
-        for ext, val in self.inputFiles.items():
-            if val is None:
-                return False
+
+    def setupLogger(self, name, log_file, level=logging.INFO):
+        handler = logging.FileHandler(log_file)
+        logger = logging.getLogger(name)
+        logger.setLevel(level)
+        logger.addHandler(handler)
+        return logger
+
+    def checkFilesAndDirectories(self):
+        if not isdir(self.inputDir):
+            toPrint = "\n[{}] ERROR!! the inputDir directory {} does not exist".format(self.executorName, self.inputDir)
+            self.LOG(toPrint, printOnConsole = True)
+            return False
+        if not isdir(self.outputDir):
+            toPrint = "\n[{}] ERROR!! the outputDir directory {} does not exist".format(self.executorName, self.outputDir)
+            self.LOG(toPrint, printOnConsole = True)
+            return False
+        if not exists(self.executable):
+            toPrint = "\n[{}] ERROR!! the executable {} does not exist".format(self.executorName, self.executable)
+            self.LOG(toPrint, printOnConsole = True)
+            return False
+        if not exists(self.parFile):
+            toPrint = "\n[{}] ERROR!! the parFile {} does not exist".format(self.executorName, self.parFile)
+            self.LOG(toPrint, printOnConsole = True)
+            return False
         return True
 
-    def cleanDirectory(self, dir):
-        filelist = listdir(dir)
-        for f in filelist:
-            remove(join(dir, f))
+    def endJob(self):
+        self.canContinue = False
+        self.commQueue.put(self.executorName)
 
-    def cleanDictionary(self):
-        for ext, val in self.inputFiles.items():
-            self.inputFiles[ext] = None
+    def stopNotification(self):
+        self.canContinue = False
+        self.LOG("[{} {}] Got stop notification from main.".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime())))
 
+    def printInfo(self):
+        toPrint = "\nMy name is: {} \nI watch the dir: {}\nI look for: {}\nI run: {}".format(self.executorName,self.inputDir,self.searchForExtsList,self.executable)
+        self.LOG(toPrint, printOnConsole = True)
+
+    def LOG(self, string, printOnConsole = False):
+        if printOnConsole or self.debug:
+            print(string)
+        self.logger.info(string)
 
 ################################################################################
 #
 #
 class ScriptExecutorCxx(ScriptExecutorBase):
 
-    def __init__(self, config, iniSectionName):
-        super().__init__(config, iniSectionName)
+    def __init__(self, config, iniSectionName, communicationQueue):
+        super().__init__(config, iniSectionName, communicationQueue)
 
     def executeScript(self):
 
-        command = 'bash '+self.executable+' '+self.inputFiles['lv2a']+' '+self.tempOutputDir+'/'+self.outputTempName
+        command = self.executable+' '+self.inputFiles['lv2a']+' '+self.tempOutputDir+'/'+self.outputTempName
 
-        print("\n[{} {}] ----> Running script with:\n  - {}".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()), command))
+        toPrint = "[{} {}] ---> SCRIPT {} IS RUNNING... PATIENCE.. <--".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()), self.executableName)
+        self.LOG(toPrint, printOnConsole = True)
 
-        system(command)
+        res = self.systemCall(command, logOutputOnFile = True)
 
-        system('cp '+self.tempOutputDir+'/'+self.outputTempName+' '+self.outputDir) # the files are moved into the output directory
+        if not res:
+            return False
 
-        print("\n[{} {}] ----> Script {} finished!".format(self.executorName, strftime("%Y-%m-%d %H:%M:%S", gmtime()), self.executableName))
 
+        moveCommand = 'cp '+self.tempOutputDir+'/'+self.outputTempName+' '+self.outputDir
 
-        """
-        os.chdir(astri_path)
-        print(os.getcwd())
-        system(command2)
-        os.chdir(astri_bootstrapper_path)
-        print(os.getcwd())
-        """
+        if not self.systemCall(moveCommand): # the files are moved into the output directory
+            return False
+
+        return True
 
 
 
@@ -190,8 +250,8 @@ class ScriptExecutorCxx(ScriptExecutorBase):
 #
 class ScriptExecutorPy(ScriptExecutorBase):
 
-    def __init__(self, config, iniSectionName):
-        super().__init__(config, iniSectionName)
+    def __init__(self, config, iniSectionName, communicationQueue):
+        super().__init__(config, iniSectionName, communicationQueue)
 
 
     def executeScript(self):
