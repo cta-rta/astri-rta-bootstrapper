@@ -25,7 +25,7 @@ from abc import ABC, abstractmethod
 from os.path import isdir
 from os import listdir, system
 from os.path import join, exists
-from time import sleep, gmtime, strftime
+from time import sleep, gmtime, strftime, time
 from threading import Thread
 import subprocess
 import logging
@@ -139,13 +139,13 @@ class ScriptExecutorBase(ABC):
             if not self.executeScript(): # The output files are written in a temp directory
                 break
 
-            if not self.systemCall('mv '+join(self.tempOutputDir,self.outputTempName)+' '+join(self.outputDir, self.outputFilename)): # Move output file when the script finished
+            if not self.systemCall('mv '+join(self.tempOutputDir,self.outputTempName)+' '+join(self.outputDir, str(time())+'_'+self.outputFilename)): # Move output file when the script finished
                 return False
 
             if not self.systemCall('rm '+self.parFileName): # Remove the par
                 break
 
-            EU.cleanDirectory(self.inputDir) # Remove the input files
+            EU.deleteFilesInDirectory(self.inputFiles.values(), self.inputDir) # Remove the input files
             EU.cleanDictionary(self.inputFiles) # Clean the input files dictionary
             self.inputFilesFound = False
 
@@ -190,8 +190,10 @@ class ScriptExecutorBase(ABC):
 
         for ext, val in self.inputFiles.items():
             if val is None:
-                newFile = EU.searchFileWithExtension(currentFiles, ext)
-                if newFile:
+                newFiles = EU.searchFileWithExtension(currentFiles, ext)
+                # take the older file
+                if len(newFiles) >= 1:
+                    newFile = EU.getOlderFile(newFiles, self.inputDir)
                     self.inputFiles[ext] = join(self.inputDir, newFile)
 
         self.LOG("{}".format(self.inputFiles), printOnConsole = True)

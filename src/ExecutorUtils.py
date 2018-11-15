@@ -20,7 +20,7 @@
 
 #!/usr/bin/env python
 
-from os import listdir, remove
+from os import listdir, remove, stat
 from os.path import join
 
 class ExecutorUtils():
@@ -30,10 +30,12 @@ class ExecutorUtils():
             dict[key] = None
 
     @staticmethod
-    def cleanDirectory(dir):
-        filelist = listdir(dir)
-        for f in filelist:
-            remove(join(dir, f))
+    def deleteFilesInDirectory(fileList, dir):
+        for f in fileList:
+            try:
+                remove(join(dir, f))
+            except FileNotFoundError:
+                pass
 
     @staticmethod
     def isDictionaryAllSet(dict):
@@ -51,12 +53,38 @@ class ExecutorUtils():
 
     @staticmethod
     def searchFileWithExtension(fileNames, extension):
+        files = []
         for f in fileNames:
             splitted = f.split('.')
             f_ext = splitted[-1]
             if extension == f_ext:
-                return f
-        return None
+                files.append(f)
+        return files
+
+    @staticmethod
+    def getOlderFile(fileNames, filesDir):
+        if len(fileNames) == 1:
+            return fileNames[0]
+
+        rank = {}
+        for f in fileNames:
+            #print("f:", f)
+            f_fullpath = join(filesDir,f)
+            #print("f_fullpath: ", f_fullpath)
+            rank[f]=stat(f_fullpath).st_mtime
+        #print(rank)
+
+        timestampMin = rank[fileNames[0]]
+        filenameMin = fileNames[0]
+        for filename, timestamp in rank.items():
+            if timestamp < timestampMin:
+                timestampMin = timestamp
+                filenameMin = filename
+        #print("filenameMin, ts: ", filenameMin, timestampMin)
+        return filenameMin
+
+
+
 
     @staticmethod
     def getErrorString(string):
