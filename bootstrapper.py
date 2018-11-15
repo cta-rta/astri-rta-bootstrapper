@@ -1,7 +1,7 @@
 import configparser
 from os import putenv, system
 from queue import Queue
-from ScriptExecutor import ScriptExecutorPy, ScriptExecutorCxx
+from src.ScriptExecutor import ScriptExecutorPy, ScriptExecutorCxx
 
 
 print("""
