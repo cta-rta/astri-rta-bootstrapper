@@ -11,7 +11,7 @@ python boostrapper.py
 * The bootstrapper.py read the config file and starts ScriptExecutors.
 * Each ScriptExecutor use a thread to run its START_WORK() main function.
   * It checks if the directories and files specified in the configuration file exist. Then, it enters in a while loop.
-  * It polls the input directory until it finds all the files that it needs to launch its analysis script.
+  * It polls the input directory until it finds all the files that it needs to launch its analysis script. The there exist more than one file of the same type, the ScriptExecutor will consume the oldest one.
   * It copies the par file within its directory
   * It creates a temporary folder to store the temporary output of the analysis script.
   * It executes the analysis script defining the needed environment variables.
