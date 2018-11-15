@@ -60,6 +60,9 @@ class ScriptExecutorBase(ABC):
         self.parFile = config[iniSectionName]['parFileDir']+'/'+config[iniSectionName]['parFileName']
         self.parFileName = config[iniSectionName]['parFileName']
 
+        # Par file management
+        self.parFieldMappingToValues = literal_eval(config[iniSectionName]['parFieldMappingToValues'])
+
         # Debugging
         self.debug = config.getboolean('GENERAL','debug')
 
@@ -78,7 +81,7 @@ class ScriptExecutorBase(ABC):
             exit()
 
         # Script input file management
-        self.searchForExtsList = EU.splitToList(config[iniSectionName]['inputExtensions'])
+        self.searchForExtsList = literal_eval(config[iniSectionName]['inputExtensions'])
         self.inputFiles = {} # Those are the files searched by the executor to run the script. Dictionary -> { extension: filepath, ..  }
         for ext in self.searchForExtsList:
             self.inputFiles[ext] = None
@@ -91,6 +94,10 @@ class ScriptExecutorBase(ABC):
 
         # Starting output
         self.printInfo()
+
+
+
+
 
 
     def threaded(fn):
@@ -135,6 +142,8 @@ class ScriptExecutorBase(ABC):
 
             if not self.systemCall('mkdir -p '+self.tempOutputDir): # Create temp folder for temporary output
                 break
+
+            self.LOG("---> SCRIPT {} IS RUNNING... PATIENCE.. <--".format(self.executableName), printOnConsole = True)
 
             if not self.executeScript(): # The output files are written in a temp directory
                 break
@@ -249,6 +258,31 @@ class ScriptExecutorBase(ABC):
             print(string)
         self.logger.info(string)
 
+    # Follia:
+    # - Per ogni riga del par file
+    #    - per ogni campo da modificare
+    #       - se il campo è nella riga
+    #          - si prende l'estensione corrispondente al campo
+    #          - si prende il path+nome del file corrispondente all'estensione
+    #          - si modifica la riga
+    def updateParFile(self):
+        updated_config = ""
+        with open(self.parFile) as af:
+            line = af.readlines()
+            for l in line:
+                for pField in self.parFieldMappingToValues.keys():
+                    if pField in l:
+                        pValueExt = self.parFieldMappingToValues[pField]
+                        pValue = self.inputFiles[pValueExt]
+                        updated_config += pField+',  s, h, "'+pValue+'" , , , ""\n'
+                    else:
+                        updated_config += l
+
+        print("Aggiornato: \n",updated_config)
+        with open(self.parFile, "w") as ac:
+            ac.write(updated_config)
+
+
 ################################################################################
 #
 #
@@ -258,8 +292,6 @@ class ScriptExecutorCxx(ScriptExecutorBase):
         super().__init__(config, iniSectionName, communicationQueue)
 
     def executeScript(self):
-
-        self.LOG("---> SCRIPT {} IS RUNNING... PATIENCE.. <--".format(self.executableName), printOnConsole = True)
 
         command = self.executable+' '+self.inputFiles['lv2a']+' '+join(self.tempOutputDir,self.outputTempName)
         if not self.systemCall(command, logOutputOnFile = True, envVars=self.envVarsDict):
@@ -281,4 +313,12 @@ class ScriptExecutorPy(ScriptExecutorBase):
 
 
     def executeScript(self):
-        print("Py RUNNING SCRIPT!!!")
+
+        if bool(self.parFieldMappingToValues):
+            self.updateParFile()
+
+        command = 'python '+self.executable
+        if not self.systemCall(command, logOutputOnFile = True, envVars=self.envVarsDict):
+            return False
+
+        return True

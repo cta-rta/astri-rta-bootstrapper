@@ -44,12 +44,7 @@ class ExecutorUtils():
                 return False
         return True
 
-    @staticmethod
-    def splitToList(string):
-        if ',' in string:
-            return string.split(',')
-        else:
-            return [string]
+
 
     @staticmethod
     def searchFileWithExtension(fileNames, extension):
