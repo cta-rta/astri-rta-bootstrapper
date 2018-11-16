@@ -44,24 +44,25 @@ class ScriptExecutorBase(ABC):
 
         # The string-ID of the executor
         self.executorName = config[iniSectionName]['name']
+        self.interpreter = config[iniSectionName]['interpreter']
 
         # Directories
-        self.inputDir = config['GENERAL']['dataPath']+'/'+config[iniSectionName]['inputDir']
-        self.tempOutputDir = config['GENERAL']['tempOutputDir']+'/'+config[iniSectionName]['outputDir']    # do NOT invert tempOutputDir and outputDir!
-        self.outputDir = config['GENERAL']['dataPath']+'/'+config[iniSectionName]['outputDir']
+        self.inputDir      = config[iniSectionName]['inputDir']
+        self.tempOutputDir = config[iniSectionName]['tempOutputDir']
+        self.outputDir     = config[iniSectionName]['outputDir']
 
         # Filenames
-        self.outputTempName = config[iniSectionName]['outputFilename']+'.tmp'
+        self.outputTempName = config[iniSectionName]['tempOutputFilename']
         self.outputFilename = config[iniSectionName]['outputFilename']
         self.executableName = config[iniSectionName]['exeName']
 
         # Existing files
-        self.executable = config[iniSectionName]['exeDir']+'/'+config[iniSectionName]['exeName']
-        self.parFile = config[iniSectionName]['parFileDir']+'/'+config[iniSectionName]['parFileName']
+        self.executable  = join(config[iniSectionName]['exeDir'],config[iniSectionName]['exeName'])
+        self.parFile     = join(config[iniSectionName]['parFileDir'],config[iniSectionName]['parFileName'])
         self.parFileName = config[iniSectionName]['parFileName']
 
         # Par file management
-        self.parFieldMappingToValues = literal_eval(config[iniSectionName]['parFieldMappingToValues'])
+        self.updateParValuesWith = literal_eval(config[iniSectionName]['updateParValuesWith'])
 
         # Debugging
         self.debug = config.getboolean('GENERAL','debug')
@@ -81,10 +82,15 @@ class ScriptExecutorBase(ABC):
             exit()
 
         # Script input file management
-        self.searchForExtsList = literal_eval(config[iniSectionName]['inputExtensions'])
-        self.inputFiles = {} # Those are the files searched by the executor to run the script. Dictionary -> { extension: filepath, ..  }
-        for ext in self.searchForExtsList:
-            self.inputFiles[ext] = None
+        self.inputSearchDict = literal_eval(config[iniSectionName]['inputSearchDict'])
+
+
+        self.inputArgs = {} # Those are the files searched by the executor to run the script. Dictionary -> { number : filepath, ..  }
+        for key,value in self.inputSearchDict.items():
+            if value['type'] == 'string':
+                self.inputArgs[key] = value['value']
+            else:
+                self.inputArgs[key] = None
         self.inputFilesFound = False
 
 
@@ -126,7 +132,7 @@ class ScriptExecutorBase(ABC):
 
                 self.searchForInputFiles()
 
-                self.inputFilesFound = EU.isDictionaryAllSet(self.inputFiles)
+                self.inputFilesFound = EU.isDictionaryAllSet(self.inputArgs)
 
 
             if not self.canContinue:
@@ -143,19 +149,27 @@ class ScriptExecutorBase(ABC):
             if not self.systemCall('mkdir -p '+self.tempOutputDir): # Create temp folder for temporary output
                 break
 
+
             self.LOG("---> SCRIPT {} IS RUNNING... PATIENCE.. <--".format(self.executableName), printOnConsole = True)
 
             if not self.executeScript(): # The output files are written in a temp directory
                 break
 
             if not self.systemCall('mv '+join(self.tempOutputDir,self.outputTempName)+' '+join(self.outputDir, str(time())+'_'+self.outputFilename)): # Move output file when the script finished
-                return False
+                break
+
+            if not self.systemCall('rm -r '+self.tempOutputDir): # Destroy the temp folder for temporary output
+                break
 
             if not self.systemCall('rm '+self.parFileName): # Remove the par
                 break
 
-            EU.deleteFilesInDirectory(self.inputFiles.values(), self.inputDir) # Remove the input files
-            EU.cleanDictionary(self.inputFiles) # Clean the input files dictionary
+            EU.deleteFilesInDirectory(self.inputArgs.values(), self.inputDir) # Remove the input files
+
+            for input_number, input_path in self.inputArgs.items(): # Clean the input files dictionary
+                if self.inputSearchDict[input_number]['type'] == 'file':
+                    self.inputArgs[input_number] = None
+
             self.inputFilesFound = False
 
 
@@ -167,12 +181,15 @@ class ScriptExecutorBase(ABC):
     # Utility functions
     #
     # return (bool err,string command, string strout,string stderr)
-    def systemCall(self, command, logOutputOnFile = False, envVars = None):
+    def systemCall(self, command, logOutputOnFile = False, envVars = None, shell=True):
 
-        completedProcess = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env = envVars)
+        completedProcess = subprocess.run(command, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=envVars)
 
-        if logOutputOnFile:
+        if logOutputOnFile and completedProcess.stdout:
             self.LOG("{}".format(completedProcess.stdout.decode("utf-8")))
+
+        if logOutputOnFile and completedProcess.stderr:
+            self.LOG("{}".format(completedProcess.stderr.decode("utf-8")))
 
         if completedProcess.returncode == 1:
             return self.checkSystemCallOutput({ 'failed': True, 'script': completedProcess.args, 'stdout': completedProcess.stdout, 'stderr': completedProcess.stderr})
@@ -197,15 +214,29 @@ class ScriptExecutorBase(ABC):
         sleep(int(self.sleepSec))
         currentFiles = listdir(self.inputDir)
 
-        for ext, val in self.inputFiles.items():
-            if val is None:
-                newFiles = EU.searchFileWithExtension(currentFiles, ext)
-                # take the older file
-                if len(newFiles) >= 1:
-                    newFile = EU.getOlderFile(newFiles, self.inputDir)
-                    self.inputFiles[ext] = join(self.inputDir, newFile)
+        # inputSearchDict = {
+        #           '1':{'type':'file', 'ext':'.lv2b', 'pattern':'', 'exludepattern':'irf', 'value':''},
+        #           '2':{'type':'file', 'ext':'lv2b', 'pattern':'irf', 'exludepattern':'', 'value':''},
+        #           '3':{'type':'file', 'ext':'lv0', 'pattern':'', 'exludepattern':'', 'value':''}
+        # }
 
-        self.LOG("{}".format(self.inputFiles), printOnConsole = True)
+        for input_number, input_path in self.inputArgs.items():
+
+            # if input type is 'file'
+            if self.inputSearchDict[input_number]['type'] == 'file':
+
+                # if file is not found yet
+                if input_path is None:
+
+                    # search for file
+                    newFiles = EU.searchFile(currentFiles, self.inputSearchDict[input_number]['ext'], self.inputSearchDict[input_number]['pattern'], self.inputSearchDict[input_number]['exludepattern'])
+
+                    # take the older file
+                    if len(newFiles) >= 1:
+                        newFile = EU.getOlderFile(newFiles, self.inputDir)
+                        self.inputArgs[input_number] = join(self.inputDir, newFile)
+
+        self.LOG("{}".format(self.inputArgs), printOnConsole = True)
 
 
 
@@ -244,7 +275,7 @@ class ScriptExecutorBase(ABC):
         self.LOG("Got stop notification from main.")
 
     def printInfo(self):
-        toPrint = "\nMy name is: {} \nI watch the dir: {}\nI look for: {}\nI run: {}\nI use {}".format(self.executorName,self.inputDir,self.searchForExtsList,self.executable, self.envVarsDict)
+        toPrint = "\nMy name is: {} \nI watch the dir: {}\nI look for: {}\nI run: {}\nI use {}".format(self.executorName,self.inputDir,self.inputSearchDict,self.executable, self.envVarsDict)
         self.LOG(toPrint, printOnConsole = True)
 
     def LOG(self, string, printOnConsole = False, addErrorDecorator = False):
@@ -262,25 +293,50 @@ class ScriptExecutorBase(ABC):
     # - Per ogni riga del par file
     #    - per ogni campo da modificare
     #       - se il campo è nella riga
-    #          - si prende l'estensione corrispondente al campo
-    #          - si prende il path+nome del file corrispondente all'estensione
+    #          - si prende il numero corrispondente all'input
+    #          - si prende il path+nome del file corrispondente al numero
     #          - si modifica la riga
     def updateParFile(self):
         updated_config = ""
-        with open(self.parFile) as af:
-            line = af.readlines()
-            for l in line:
-                for pField in self.parFieldMappingToValues.keys():
-                    if pField in l:
-                        pValueExt = self.parFieldMappingToValues[pField]
-                        pValue = self.inputFiles[pValueExt]
-                        updated_config += pField+',  s, h, "'+pValue+'" , , , ""\n'
-                    else:
-                        updated_config += l
+        with open('./'+self.parFileName) as af:
+            lines = af.readlines()
+            #print("Original: ",lines)
+            for l in lines:
+                #print("l: ",l)
+                replaced = False
+                firstValueInLine = self.extractFirstValueFromParLine(l)
+                #print("firstValueInLine: ", firstValueInLine)
 
-        print("Aggiornato: \n",updated_config)
-        with open(self.parFile, "w") as ac:
+                for pField in self.updateParValuesWith.keys():
+                    #print("Searching ",pField," in ", firstValueInLine)
+                    if pField == firstValueInLine:
+                        #print("Found: ",pField)
+                        inputNumber = self.updateParValuesWith[pField]
+                        #print("pValueExt: ",pValueExt)
+                        pValue = self.inputArgs[inputNumber]
+                        #print("pValue: ",pValue)
+                        updated_config += pField+',  s, h, "'+pValue+'" , , , "abcde"\n'
+                        #print("updated_config: ",updated_config)
+                        replaced = True
+                    #else:
+                        #print("Not found ",pField)
+                if not replaced:
+                    updated_config += l
+                    #print("updated_config: ",updated_config)
+        #print("Aggiornato: \n",updated_config)
+        with open('./'+self.parFileName, "w") as ac:
             ac.write(updated_config)
+
+
+    def extractFirstValueFromParLine(self, line):
+        if ',' in line:
+            #print("LINE: ", line)
+            values = line.split(",")
+            return values[0]
+        return line
+
+
+
 
 
 ################################################################################
@@ -293,7 +349,18 @@ class ScriptExecutorCxx(ScriptExecutorBase):
 
     def executeScript(self):
 
-        command = self.executable+' '+self.inputFiles['lv2a']+' '+join(self.tempOutputDir,self.outputTempName)
+        command = self.executable+' '
+
+        if not bool(self.updateParValuesWith):
+
+            for inputArg in self.inputArgs.values():
+                command += inputArg+' '
+
+        else:
+            self.updateParFile()
+
+        self.LOG(command, printOnConsole=True)
+
         if not self.systemCall(command, logOutputOnFile = True, envVars=self.envVarsDict):
             return False
 
@@ -314,11 +381,28 @@ class ScriptExecutorPy(ScriptExecutorBase):
 
     def executeScript(self):
 
-        if bool(self.parFieldMappingToValues):
+        command = [self.interpreter, self.executable]
+
+        if not bool(self.updateParValuesWith):
+
+            for inputArg in self.inputArgs:
+                command.append(inputArg)
+
+        else:
             self.updateParFile()
 
-        command = 'python '+self.executable
-        if not self.systemCall(command, logOutputOnFile = True, envVars=self.envVarsDict):
+        self.LOG(''.join(command), printOnConsole=True)
+
+        if not self.systemCall('python --version', logOutputOnFile = True):
+            return False
+        if not self.systemCall('which python', logOutputOnFile = True):
+            return False
+        if not self.systemCall(["python", "--version"], logOutputOnFile = True, shell=False):
+            return False
+        if not self.systemCall(["which", "python"], logOutputOnFile = True, shell=False):
+            return False
+
+        if not self.systemCall(command, logOutputOnFile = True, envVars=self.envVarsDict, shell=False):
             return False
 
         return True

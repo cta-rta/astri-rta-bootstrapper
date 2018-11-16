@@ -21,13 +21,10 @@
 #!/usr/bin/env python
 
 from os import listdir, remove, stat
-from os.path import join
+from os.path import join, splitext
 
 class ExecutorUtils():
-    @staticmethod
-    def cleanDictionary(dict):
-        for key, val in dict.items():
-            dict[key] = None
+ 
 
     @staticmethod
     def deleteFilesInDirectory(fileList, dir):
@@ -44,17 +41,33 @@ class ExecutorUtils():
                 return False
         return True
 
-
-
     @staticmethod
-    def searchFileWithExtension(fileNames, extension):
-        files = []
+    def searchFile(fileNames, extension, pattern='', excludePattern=''):
+        goodFiles = []
         for f in fileNames:
-            splitted = f.split('.')
-            f_ext = splitted[-1]
-            if extension == f_ext:
-                files.append(f)
-        return files
+
+            filename, file_extension = splitext(f)
+
+            good = False
+            if file_extension == extension:
+
+                if not bool(pattern) and not bool(excludePattern):
+                    good = True
+
+                if bool(pattern) and pattern in filename and not bool(excludePattern):
+                    good = True
+
+                if bool(excludePattern) and excludePattern not in filename and not bool(pattern):
+                    good = True
+
+                if bool(pattern) and bool(excludePattern) and pattern in filename and excludePattern not in filename:
+                    good = True
+
+                if good:
+                    goodFiles.append(f)
+
+        return goodFiles
+
 
     @staticmethod
     def getOlderFile(fileNames, filesDir):
