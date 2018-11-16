@@ -19,8 +19,12 @@
 # ==========================================================================
 
 #!/usr/bin/env python
+
 import unittest
+from os import system
+
 from ExecutorUtils import ExecutorUtils as EU
+from FilesTracker import FilesTracker
 
 class ExecutorUtilsTest(unittest.TestCase):
 
@@ -28,29 +32,106 @@ class ExecutorUtilsTest(unittest.TestCase):
 
         files = ['a_pippo_b.txt', 'a_pippo_b.jpg', 'a_pluto_b.jpg', 'a_paperino_b.gif', 'a_paperino_pluto_b.gif', 'a_paperone_c.gif']
 
-        found = EU.searchFile(files, '.txt')
-        self.assertEqual(1, len(found))
-        self.assertEqual('a_pippo_b.txt', found[0])
+        filesFound = EU.searchFile(files, '.txt')
+        self.assertEqual(1, len(filesFound))
+        self.assertEqual('a_pippo_b.txt', filesFound[0])
 
-        found = EU.searchFile(files, '.jpg')
-        self.assertEqual(2, len(found))
-        self.assertEqual('a_pippo_b.jpg', found[0])
-        self.assertEqual('a_pluto_b.jpg', found[1])
+        filesFound = EU.searchFile(files, '.jpg')
+        self.assertEqual(2, len(filesFound))
+        self.assertEqual('a_pippo_b.jpg', filesFound[0])
+        self.assertEqual('a_pluto_b.jpg', filesFound[1])
 
-        found = EU.searchFile(files, '.jpg', pattern='pluto')
-        self.assertEqual(1, len(found))
-        self.assertEqual('a_pluto_b.jpg', found[0])
+        filesFound = EU.searchFile(files, '.jpg', pattern='pluto')
+        self.assertEqual(1, len(filesFound))
+        self.assertEqual('a_pluto_b.jpg', filesFound[0])
 
-        found = EU.searchFile(files, '.jpg', excludePattern='pluto')
-        self.assertEqual(1, len(found))
-        self.assertEqual('a_pippo_b.jpg', found[0])
+        filesFound = EU.searchFile(files, '.jpg', excludePattern='pluto')
+        self.assertEqual(1, len(filesFound))
+        self.assertEqual('a_pippo_b.jpg', filesFound[0])
 
-        found = EU.searchFile(files, '.gif', pattern='paperino', excludePattern='pluto')
-        self.assertEqual(1, len(found))
-        self.assertEqual('a_paperino_b.gif', found[0])
+        filesFound = EU.searchFile(files, '.gif', pattern='paperino', excludePattern='pluto')
+        self.assertEqual(1, len(filesFound))
+        self.assertEqual('a_paperino_b.gif', filesFound[0])
+
+
+class FilesTrackerTest(unittest.TestCase):
+
+    def setUp(self):
+
+        system('mkdir -p test_dir/files_dir')
+
+        files = ['file1.hpp',
+                 'file2.hpp',
+                 'file3.png',
+                 'a_pippo_b.txt',
+                 'a_pippo_b.jpg',
+                 'a_pluto_b.jpg',
+                 'a_paperino_b.gif',
+                 'a_paperino_pluto_b.gif',
+                 'a_paperone_c.gif']
+
+        for file in files:
+            system('touch test_dir/files_dir/'+file)
 
 
 
+    def test_track_files(self):
+
+        files         = {'a.txt', 'b.txt', 'c.png'}
+        trackedFiles  = { 'c.png' }
+        consumedFiles = { 'b.txt' }
+
+        trackedFiles = FilesTracker.trackFiles(files, trackedFiles, consumedFiles)
+
+        self.assertEqual(2, len(trackedFiles))
+        self.assertEqual(True,'a.txt' in trackedFiles)
+        self.assertEqual(True,'c.png' in trackedFiles)
+
+
+    def test_poll(self):
+        ft = FilesTracker('test_dir/files_dir')
+
+        ft.poll()
+
+        print(ft.trackedFiles)
+
+        self.assertEqual(9, len(ft.trackedFiles))
+        self.assertEqual(True,'test_dir/files_dir/file1.hpp' in ft.trackedFiles)
+        self.assertEqual(True,'test_dir/files_dir/file2.hpp' in ft.trackedFiles)
+        self.assertEqual(True,'test_dir/files_dir/file3.png' in ft.trackedFiles)
+
+
+    def test_search_file_1(self):    # searchFile(fileNames, extension, pattern='', excludePattern='')
+
+
+        ft = FilesTracker('test_dir/files_dir')
+
+        ft.poll()
+
+        filesFound = ft.searchFile('.txt')
+
+        self.assertEqual(1, len(filesFound))
+        self.assertEqual(True, 'test_dir/files_dir/a_pippo_b.txt' in filesFound)
+
+        filesFound = ft.searchFile('.jpg')
+        self.assertEqual(2, len(filesFound))
+        self.assertEqual(True, 'test_dir/files_dir/a_pippo_b.jpg' in filesFound)
+        self.assertEqual(True, 'test_dir/files_dir/a_pluto_b.jpg' in filesFound)
+
+        filesFound = ft.searchFile('.jpg', pattern='pluto')
+        self.assertEqual(1, len(filesFound))
+        self.assertEqual(True, 'test_dir/files_dir/a_pluto_b.jpg' in filesFound)
+
+        filesFound = ft.searchFile('.jpg', excludePattern='pluto')
+        self.assertEqual(1, len(filesFound))
+        self.assertEqual(True, 'test_dir/files_dir/a_pippo_b.jpg' in filesFound)
+
+        filesFound = ft.searchFile('.gif', pattern='paperino', excludePattern='pluto')
+        self.assertEqual(1, len(filesFound))
+        self.assertEqual(True, 'test_dir/files_dir/a_paperino_b.gif' in filesFound)
+
+    def tearDown(self):
+        system('rm -r test_dir')
 
 
 

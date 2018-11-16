@@ -20,35 +20,67 @@
 
 #!/usr/bin/env python
 
-from os import listdir, remove, stat
+from os import listdir, remove, stat, walk
 from os.path import join, splitext
 
-class ExecutorUtils():
+
+class FilesTracker():
+
+    """
+        TRACKED_FILE ----> CONSUMED_FILE
+    """
+
+    def __init__(self, directory):
+
+        self.directory = directory
+        self.trackedFiles = set()
+        self.consumedFiles = set()
+
+    """
+        The poll will read the directory and will update the FileTracker data structures.
+    """
+    def poll(self):
+
+        polled = set()
+
+        for dirname, dirnames, filenames in walk(self.directory):
+
+            for filename in filenames:
+                polled.add(join(dirname, filename))
 
 
+        self.trackedFiles = self.trackFiles(polled, self.trackedFiles, self.consumedFiles)
+
+
+    def consumed(self, file):
+        self.trackedFiles.remove(file)
+        self.consumedFiles.add(file)
+
+
+    # put a file in the tracked set if the file is not into consumed set and not into tracked set
     @staticmethod
-    def deleteFilesInDirectory(fileList, dir):
-        for f in fileList:
-            try:
-                remove(join(dir, f))
-            except FileNotFoundError:
-                pass
+    def trackFiles(files, trackedFiles, consumedFiles):
 
-    @staticmethod
-    def isDictionaryAllSet(dict):
-        for key, val in dict.items():
-            if val is None:
-                return False
-        return True
+        newFiles = files.difference((trackedFiles.union(consumedFiles)))
 
-    @staticmethod
-    def searchFile(fileNames, extension, pattern='', excludePattern=''):
-        goodFiles = []
-        for f in fileNames:
+        for f in newFiles:
+            trackedFiles.add(f)
+
+        return trackedFiles
+
+
+    def searchFile(self, extension, pattern='', excludePattern=''):
+
+        goodFiles = set()
+
+        for f in self.trackedFiles:
 
             filename, file_extension = splitext(f)
+            #print("\nfilename: ", filename)
+            #print("file_extension: ", file_extension)
 
             good = False
+
             if file_extension == extension:
 
                 if not bool(pattern) and not bool(excludePattern):
@@ -64,36 +96,6 @@ class ExecutorUtils():
                     good = True
 
                 if good:
-                    goodFiles.append(f)
+                    goodFiles.add(f)
 
         return goodFiles
-
-
-    @staticmethod
-    def getOlderFile(fileNames, filesDir):
-        if len(fileNames) == 1:
-            return fileNames[0]
-
-        rank = {}
-        for f in fileNames:
-            #print("f:", f)
-            f_fullpath = join(filesDir,f)
-            #print("f_fullpath: ", f_fullpath)
-            rank[f]=stat(f_fullpath).st_mtime
-        #print(rank)
-
-        timestampMin = rank[fileNames[0]]
-        filenameMin = fileNames[0]
-        for filename, timestamp in rank.items():
-            if timestamp < timestampMin:
-                timestampMin = timestamp
-                filenameMin = filename
-        #print("filenameMin, ts: ", filenameMin, timestampMin)
-        return filenameMin
-
-
-
-
-    @staticmethod
-    def getErrorString(string):
-        return '\n** ERROR! **************************************************\n'+string+'\n************************************************************\n\n'
