@@ -27,7 +27,7 @@ Each ScriptExecutor has its own log file, located under the logs/ directory.
 If any system call raise any error, all the ScriptExecutors will quit, reporting the error.
 
 ## Assumptions
-* All the scripts uses the PAR input sysyem.
+* All the scripts use the PAR input sysyem.
 * All the different input files needed for the analysis script executions must be located into the same directory.
 * Each script asks where to save the output file (at least one file)
 
@@ -62,7 +62,7 @@ For each script you want to handle, you need to write a script-specific section 
 
 ```python
 scriptInputsDict = { '1':{'type':'inptufile', 'ext':'lv2a', 'pattern':'', 'exludepattern':'irf', 'value':''},
-                     '2':{'type':'output', 'ext':'', 'pattern':'', 'exludepattern':'', 'value':'/home/cta/Baroncelli_development/ASTRI_DL2/output/dl3.out/astri.out.lv3'}
+                     '2':{'type':'output', 'ext':'', 'pattern':'', 'exludepattern':'', 'value':'/home/user/pipeoutput/dl3.out/astri.out.lv3'}
                   }
 ```
 
@@ -78,7 +78,7 @@ updateParValuesWith = [required] {'evfile':'1', 'outfile':'2'}
 * envvars = [required] [Python Dictionary] It contains all the environment variables that are needed in order to run the script.
 Example:
 ```python
-envvars = {'RTACONFIGFILE': '/home/cta/Baroncelli_development/ASTRI_DL2/RTAlib/Configs/rtalibconfig_evt3', 'PYTHONPATH':'/home/cta/Baroncelli_development/ASTRI_DL2/RTAlib/PyRTAlib:/home/cta/Baroncelli_development/ASTRI_DL2/RTAlib-ASTRI/PyRTAlib', 'PFILES':'/home/cta/Baroncelli_development/astri-rta-bootstrapper'}
+envvars = { 'PYTHONPATH':'/home/user/pythonlib:/home/user/pythonlib2', 'PFILES':'/home/user/c++project/parfiles'}
 ```
 
 ### Blank configuration file
