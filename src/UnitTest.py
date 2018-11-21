@@ -23,112 +23,130 @@
 import unittest
 from os import system
 
-from ExecutorUtils import ExecutorUtils as EU
 from FilesTracker import FilesTracker
-
-class ExecutorUtilsTest(unittest.TestCase):
-
-    def test_search_file_1(self):    # searchFile(fileNames, extension, pattern='', excludePattern='')
-
-        files = ['a_pippo_b.txt', 'a_pippo_b.jpg', 'a_pluto_b.jpg', 'a_paperino_b.gif', 'a_paperino_pluto_b.gif', 'a_paperone_c.gif']
-
-        filesFound = EU.searchFile(files, '.txt')
-        self.assertEqual(1, len(filesFound))
-        self.assertEqual('a_pippo_b.txt', filesFound[0])
-
-        filesFound = EU.searchFile(files, '.jpg')
-        self.assertEqual(2, len(filesFound))
-        self.assertEqual('a_pippo_b.jpg', filesFound[0])
-        self.assertEqual('a_pluto_b.jpg', filesFound[1])
-
-        filesFound = EU.searchFile(files, '.jpg', pattern='pluto')
-        self.assertEqual(1, len(filesFound))
-        self.assertEqual('a_pluto_b.jpg', filesFound[0])
-
-        filesFound = EU.searchFile(files, '.jpg', excludePattern='pluto')
-        self.assertEqual(1, len(filesFound))
-        self.assertEqual('a_pippo_b.jpg', filesFound[0])
-
-        filesFound = EU.searchFile(files, '.gif', pattern='paperino', excludePattern='pluto')
-        self.assertEqual(1, len(filesFound))
-        self.assertEqual('a_paperino_b.gif', filesFound[0])
+from FilesTracker import ConsumeStrategy
+from FilesTracker import File
 
 
 class FilesTrackerTest(unittest.TestCase):
+
+    files = []
+
 
     def setUp(self):
 
         system('mkdir -p test_dir/files_dir')
 
-        files = ['file1.hpp',
-                 'file2.hpp',
-                 'file3.png',
-                 'a_pippo_b.txt',
-                 'a_pippo_b.jpg',
-                 'a_pluto_b.jpg',
-                 'a_paperino_b.gif',
-                 'a_paperino_pluto_b.gif',
-                 'a_paperone_c.gif']
+        self.files = ['test_dir/files_dir/a.hpp',
+                      'test_dir/files_dir/b.hpp',
+                      'test_dir/files_dir/c.png',
+                      'test_dir/files_dir/d.png',
+                      'test_dir/files_dir/e.jpg',
+                      'test_dir/files_dir/f.jpg',
+                      'test_dir/files_dir/g.gif',
+                      'test_dir/files_dir/h.gif',
+                      'test_dir/files_dir/e.txt',
+                      'test_dir/files_dir/f_xyz.txt',
+                      'test_dir/files_dir/f_xyz_qwerty.txt',
+                      'test_dir/files_dir/f_qwerty.txt'
+                     ]
 
-        for file in files:
-            system('touch test_dir/files_dir/'+file)
+        for file in self.files:
+            system('touch '+file)
 
-
-
-    def test_track_files(self):
-
-        files         = {'a.txt', 'b.txt', 'c.png'}
-        trackedFiles  = { 'c.png' }
-        consumedFiles = { 'b.txt' }
-
-        trackedFiles = FilesTracker.trackFiles(files, trackedFiles, consumedFiles)
-
-        self.assertEqual(2, len(trackedFiles))
-        self.assertEqual(True,'a.txt' in trackedFiles)
-        self.assertEqual(True,'c.png' in trackedFiles)
+    def test_file_class(self):
+        f = File(self.files[0])
+        self.assertEqual('test_dir/files_dir/a.hpp', f.filefullpath)
+        self.assertEqual('test_dir/files_dir/', f.filepath)
+        self.assertEqual('a.hpp', f.filename)
+        self.assertEqual('hpp', f.fileext)
+        self.assertEqual(False, f.consumed)
 
 
     def test_poll(self):
         ft = FilesTracker('test_dir/files_dir')
-
         ft.poll()
 
-        print(ft.trackedFiles)
+        self.assertEqual(len(self.files), len(ft.availableFiles))
+        #self.assertEqual(True,f in ft.availableFiles)
 
-        self.assertEqual(9, len(ft.trackedFiles))
-        self.assertEqual(True,'test_dir/files_dir/file1.hpp' in ft.trackedFiles)
-        self.assertEqual(True,'test_dir/files_dir/file2.hpp' in ft.trackedFiles)
-        self.assertEqual(True,'test_dir/files_dir/file3.png' in ft.trackedFiles)
+    def test_oldestFile(self):
+        system('mkdir -p test_dir/files_dir_2')
+        system('touch test_dir/files_dir_2/a.txt')
+        system('touch test_dir/files_dir_2/b.txt')
+        system('touch test_dir/files_dir_2/c.txt')
 
+        ft = FilesTracker('test_dir/files_dir_2')
+        ft.poll()
 
-    def test_search_file_1(self):    # searchFile(fileNames, extension, pattern='', excludePattern='')
+        oldestFile = ft.getOldestFile()
+        self.assertEqual('test_dir/files_dir_2/a.txt', oldestFile.filefullpath)
 
+        system('rm test_dir/files_dir_2/a.txt')
+        ft.poll()
+
+        oldestFile = ft.getOldestFile()
+        self.assertEqual('test_dir/files_dir_2/b.txt', oldestFile.filefullpath)
+
+        system('rm -r test_dir/files_dir_2')
+
+    def test_consume_keep_strategy_and_poll(self):
+        f = File('test_dir/files_dir/a.hpp')
 
         ft = FilesTracker('test_dir/files_dir')
-
         ft.poll()
+        ft.consume(f)
 
-        filesFound = ft.searchFile('.txt')
+        file = ft.getFileFromFilename('a.hpp')
+        self.assertEqual(True, file.consumed) # the file is consumed but not removed
 
-        self.assertEqual(1, len(filesFound))
-        self.assertEqual(True, 'test_dir/files_dir/a_pippo_b.txt' in filesFound)
+    def test_consume_delete_strategy_and_poll(self):
+        f = File('test_dir/files_dir/a.hpp')
 
-        filesFound = ft.searchFile('.jpg')
-        self.assertEqual(2, len(filesFound))
-        self.assertEqual(True, 'test_dir/files_dir/a_pippo_b.jpg' in filesFound)
-        self.assertEqual(True, 'test_dir/files_dir/a_pluto_b.jpg' in filesFound)
+        ft = FilesTracker('test_dir/files_dir', consumeStrategy = ConsumeStrategy.DELETE)
+        ft.poll()
+        ft.consume(f)
 
-        filesFound = ft.searchFile('.jpg', pattern='pluto')
-        self.assertEqual(1, len(filesFound))
-        self.assertEqual(True, 'test_dir/files_dir/a_pluto_b.jpg' in filesFound)
+        file = ft.getFileFromFilename('a.hpp')
+        self.assertEqual(None, file) # the file is consumed and removed
 
-        filesFound = ft.searchFile('.jpg', excludePattern='pluto')
-        self.assertEqual(1, len(filesFound))
-        self.assertEqual(True, 'test_dir/files_dir/a_pippo_b.jpg' in filesFound)
+        file = ft.getFileFromFilename('a.hpp', searchAlsoInRemovedList=True)
+        self.assertEqual(True, file.consumed) # the file is consumed and removed
 
-        filesFound = ft.searchFile('.gif', pattern='paperino', excludePattern='pluto')
-        self.assertEqual(1, len(filesFound))
-        self.assertEqual(True, 'test_dir/files_dir/a_paperino_b.gif' in filesFound)
+
+    def test_search_file(self):    # searchFile(fileNames, extension, pattern='', excludePattern='')
+
+        ft = FilesTracker('test_dir/files_dir')
+        ft.poll()
+        filesTxtFound = ft.searchFile('txt')
+        filesHppFound = ft.searchFile('hpp')
+        filesJpgFound = ft.searchFile('jpg')
+        filesPngFound = ft.searchFile('png')
+        filesGifFound = ft.searchFile('gif')
+        self.assertEqual(4, len(filesTxtFound))
+        self.assertEqual(2, len(filesHppFound))
+        self.assertEqual(2, len(filesJpgFound))
+        self.assertEqual(2, len(filesPngFound))
+        self.assertEqual(2, len(filesGifFound))
+
+        f1 = File('test_dir/files_dir/f_xyz.txt')
+        f2 = File('test_dir/files_dir/f_xyz_qwerty.txt')
+        filesFounds = ft.searchFile('txt', pattern='xyz')
+        self.assertEqual(2, len(filesFounds))
+        self.assertEqual(True, f1 in filesFounds and f2 in filesFounds)
+
+        f1 = File('test_dir/files_dir/e.txt')
+        f2 = File('test_dir/files_dir/f_qwerty.txt')
+        filesFounds = ft.searchFile('txt', excludePattern='xyz')
+        self.assertEqual(2, len(filesFounds))
+        self.assertEqual(True, f1 in filesFounds and f2 in filesFounds)
+
+        f = File('test_dir/files_dir/f_qwerty.txt')
+        filesFounds = ft.searchFile('txt', pattern='qwerty', excludePattern='xyz')
+        self.assertEqual(1, len(filesFounds))
+        self.assertEqual(True, f in filesFounds)
+
+
 
     def tearDown(self):
         system('rm -r test_dir')
@@ -137,5 +155,4 @@ class FilesTrackerTest(unittest.TestCase):
 
 
 if __name__ == '__main__':
-
     unittest.main()

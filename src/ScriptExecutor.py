@@ -32,7 +32,7 @@ import logging
 from ast import literal_eval
 
 from .ExecutorUtils import ExecutorUtils as EU
-
+from .FilesTracker import FilesTracker, ConsumeStrategy
 
 class ScriptExecutorBase(ABC):
 
@@ -50,6 +50,13 @@ class ScriptExecutorBase(ABC):
         self.inputDir      = config[iniSectionName]['inputDir']
         self.tempOutputDir = config[iniSectionName]['tempOutputDir']
         self.outputDir     = config[iniSectionName]['outputDir']
+
+        # Files tracker
+        if config.getboolean('GENERAL','keepInputFiles'):
+            self.ft = FilesTracker(self.inputDir, consumeStrategy=ConsumeStrategy.KEEP)
+        else:
+            self.ft = FilesTracker(self.inputDir, consumeStrategy=ConsumeStrategy.DELETE)
+
 
         # Filenames
         self.outputTempName = config[iniSectionName]['tempOutputFilename']
@@ -130,6 +137,10 @@ class ScriptExecutorBase(ABC):
             #################
             while not self.inputFilesFound and self.canContinue:
 
+                sleep(int(self.sleepSec))
+
+                self.ft.poll()
+
                 self.searchForInputFiles()
 
                 self.inputFilesFound = EU.isDictionaryAllSet(self.inputArgs)
@@ -164,13 +175,16 @@ class ScriptExecutorBase(ABC):
             if not self.systemCall('rm '+self.parFileName): # Remove the par
                 break
 
-            EU.deleteFilesInDirectory(self.inputArgs.values(), self.inputDir) # Remove the input files
 
-            for input_number, input_path in self.inputArgs.items(): # Clean the input files dictionary
+            for input_number, input_path in self.inputArgs.items():
+
                 if self.inputSearchDict[input_number]['type'] == 'file':
-                    self.inputArgs[input_number] = None
+                    
+                    self.ft.consume(self.inputArgs[input_number])          # Mark the file as 'consumed'
 
-            self.inputFilesFound = False
+                    self.inputArgs[input_number] = None                    # Clean the input files dictionary
+
+            self.inputFilesFound = False                                   # Clean bool var
 
 
         self.LOG("Quitting..", printOnConsole = True)
@@ -211,9 +225,6 @@ class ScriptExecutorBase(ABC):
     # Polling
     def searchForInputFiles(self):
 
-        sleep(int(self.sleepSec))
-        currentFiles = listdir(self.inputDir)
-
         # inputSearchDict = {
         #           '1':{'type':'file', 'ext':'.lv2b', 'pattern':'', 'exludepattern':'irf', 'value':''},
         #           '2':{'type':'file', 'ext':'lv2b', 'pattern':'irf', 'exludepattern':'', 'value':''},
@@ -229,12 +240,12 @@ class ScriptExecutorBase(ABC):
                 if input_path is None:
 
                     # search for file
-                    newFiles = EU.searchFile(currentFiles, self.inputSearchDict[input_number]['ext'], self.inputSearchDict[input_number]['pattern'], self.inputSearchDict[input_number]['exludepattern'])
+                    newFiles = self.ft.searchFile(self.inputSearchDict[input_number]['ext'], pattern = self.inputSearchDict[input_number]['pattern'], excludePattern = self.inputSearchDict[input_number]['exludepattern'])
 
-                    # take the older file
+                    # take the oldest file
                     if len(newFiles) >= 1:
-                        newFile = EU.getOlderFile(newFiles, self.inputDir)
-                        self.inputArgs[input_number] = join(self.inputDir, newFile)
+                        oldestFile = self.ft.getOldestFile(newFiles)
+                        self.inputArgs[input_number] = oldestFile.filefullpath
 
         self.LOG("{}".format(self.inputArgs), printOnConsole = True)
 

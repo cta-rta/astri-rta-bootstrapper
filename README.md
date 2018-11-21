@@ -17,7 +17,7 @@ python boostrapper.py
   * It executes the analysis script defining the needed environment variables.
   * When the analysis script is terminated, it moves its temporary output to the right destination directory (there will be another ScriptExecutor polling in that directory)
   * It deletes the par file
-  * It deletes the input files
+  * It deletes the input files or marks them as 'consumed'
   * It starts to poll again
 
 ## Logging
@@ -28,10 +28,10 @@ If any system call raise any error, all the ScriptExecutors will quit, reporting
 
 ## Assumptions
 * All the scripts uses the PAR input sysyem.
-* Each script produces only one file -> TO MODIFY!!
 * All the different input files needed for the analysis script executions must be located into the same directory.
-* The input files that are used for an analysis script execution, are deleted when the script ends. -> TO MODIFY!! Mark them as 'used' or move them.
 * Each script asks where to save the output file
+
+* Each script produces only one file -> TO MODIFY!!
 
 ## Configuration file
 The configuration file has a 'general' section and one 'script-specific' section for each script.
@@ -41,6 +41,7 @@ The configuration file has a 'general' section and one 'script-specific' section
 ### General section
 * debug: [yes/no] [required] if yes all the logs will be output on the console
 * logDir: [required] the directory containing the log files will be created at 'logDir' path (should NOT end with '/')
+* keepInputFiles: [required] if yes the input files are not deleted once used but they remain in the input directory
 
 ### Script-specific section
 For each script you want to handle, you need to write a script-specific section with the following keys:
@@ -91,6 +92,7 @@ envvars = {'RTACONFIGFILE': '/home/cta/Baroncelli_development/ASTRI_DL2/RTAlib/C
 [GENERAL]
 debug =  ..
 logDir =  ..
+keepInputFiles = ..
 
 [script_1]
 name = ..

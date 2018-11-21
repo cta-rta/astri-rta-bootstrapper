@@ -21,10 +21,14 @@
 #!/usr/bin/env python
 
 import configparser
-from os import putenv, system
 from queue import Queue
+from sys import argv
 from src.ScriptExecutor import ScriptExecutorPy, ScriptExecutorCxx
 
+if len(argv) < 2:
+    print("Please enter the path to the configuration file")
+    exit()
+configurationFilePath = argv[1]
 
 print("""
 --------------------------------------------------------------------------------
@@ -37,7 +41,7 @@ print("""
 """)
 
 config = configparser.ConfigParser()
-config.read('conf.ini')
+config.read(configurationFilePath)
 sections = config.sections()
 sections.remove('GENERAL')
 print("Scripts:\n{}".format(sections))
