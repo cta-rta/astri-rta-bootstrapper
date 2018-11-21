@@ -56,15 +56,15 @@ For each script you want to handle, you need to write a script-specific section 
 
 * inputDir = [required] full path to the directory that contains the input files (should NOT end with '/')
 
-* inputSearchDict = [Python dictionary] [required] Here are defined all the inputs you want to give to the script. There are two types of input: the 'file' type (the ScriptExecutor will look for it) and the 'string' type -> its value is passed through the configuration file. Each dictionary key has a incremental integer number that corrisponds to the order with wich you want to give the inputs. The corrisponding value is another python dictionary that describe the input (lets call it value-dictionary). The value-dictionary contains several parameters:
-  * type: [file/string] -> if the input is type 'file', it will be searched using 'ext', 'pattern' and 'excludepattern' parameters. If it is type 'string', its value is passed through the 'value' parameter.
+* scriptInputsDict = [Python dictionary] [required] Here are defined all the inputs you want to give to the script. There are two types of input: the 'file' type (the ScriptExecutor will look for it) and the 'string' type -> its value is passed through the configuration file. Each dictionary key has a incremental integer number that corrisponds to the order with wich you want to give the inputs. The corrisponding value is another python dictionary that describe the input (lets call it value-dictionary). The value-dictionary contains several parameters:
+  * type: [inputfile/output] -> if the input is type 'inputfile', it will be searched using 'ext', 'pattern' and 'excludepattern' parameters. If it is type 'output', its value is passed through the 'value' parameter.
   * ext: file extension, must be start with '.' (e.g. .lv2b)
   * pattern: if a 'pattern' value is provided, the ScriptExecutor will looks for a filename with extension 'ext' and containing the 'pattern' in its filename
   * excludepattern: -> if a 'excludepattern' value is provided, the ScriptExecutor will looks for a filename with extension 'ext' and NOT containing the 'excludepattern' in its filename
-  * value: the actual string value if type=string
+  * value: the actual string value if type=output
 
 ```python
-inputSearchDict = {'1':{'type':'file', 'ext':'.lv2a', 'pattern':'', 'exludepattern':'irf', 'value':''}, '2':{'type':'string', 'ext':'', 'pattern':'', 'exludepattern':'', 'value':'/home/cta/Baroncelli_development/astri-rta-bootstrapper/tmp/dl2b.out/astri.lv2b.tmp'}}
+scriptInputsDict = {'1':{'type':'file', 'ext':'.lv2a', 'pattern':'', 'exludepattern':'irf', 'value':''}, '2':{'type':'string', 'ext':'', 'pattern':'', 'exludepattern':'', 'value':'/home/cta/Baroncelli_development/astri-rta-bootstrapper/tmp/dl2b.out/astri.lv2b.tmp'}}
 ```
 
 
@@ -75,11 +75,7 @@ Example:
 ```python
 updateParValuesWith = [required] {'evfile':'1', 'outfile':'2'}
 ```
-* tempOutputDir = [required] full path to the directory that contains the temporary output file (should NOT end with '/'). The output files will be copied into another directory only when the script finishes its execution
-* tempOutputFilename = [required] output file temporary name.
 
-* outputDir = [required] full path to the directory that contains the output file (should NOT end with '/').
-* outputFilename = [required] output file name.
 
 * envvars = [required] [Python Dictionary] It contains all the environment variables that are needed in order to run the script.
 Example:
@@ -104,17 +100,11 @@ exeDir = ..
 exeName = ..
 
 inputDir = ..
-inputSearchDict = {}
+scriptInputsDict = {}
 
 parFileDir = ..
 parFileName = ..
 updateParValuesWith = {}
-
-tempOutputDir = ..
-tempOutputFilename = ..
-
-outputDir = ..
-outputFilename = ..
 
 envVars = {}
 ```

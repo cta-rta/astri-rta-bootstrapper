@@ -48,8 +48,6 @@ class ScriptExecutorBase(ABC):
 
         # Directories
         self.inputDir      = config[iniSectionName]['inputDir']
-        self.tempOutputDir = config[iniSectionName]['tempOutputDir']
-        self.outputDir     = config[iniSectionName]['outputDir']
 
         # Files tracker
         if config.getboolean('GENERAL','keepInputFiles'):
@@ -59,8 +57,6 @@ class ScriptExecutorBase(ABC):
 
 
         # Filenames
-        self.outputTempName = config[iniSectionName]['tempOutputFilename']
-        self.outputFilename = config[iniSectionName]['outputFilename']
         self.executableName = config[iniSectionName]['exeName']
 
         # Existing files
@@ -89,16 +85,26 @@ class ScriptExecutorBase(ABC):
             exit()
 
         # Script input file management
-        self.inputSearchDict = literal_eval(config[iniSectionName]['inputSearchDict'])
+        self.scriptInputsDict = literal_eval(config[iniSectionName]['scriptInputsDict'])
 
 
         self.inputArgs = {} # Those are the files searched by the executor to run the script. Dictionary -> { number : filepath, ..  }
-        for key,value in self.inputSearchDict.items():
-            if value['type'] == 'string':
-                self.inputArgs[key] = value['value']
-            else:
+
+        for key,values in self.scriptInputsDict.items():
+
+            if values['type'] == 'output':
+                filename,filepath = FilesTracker.getBasenameAndFilename(values['value'])
+                self.inputArgs[key] = 'tmp/'+filename+'_tmp'
+
+            elif values['type'] == 'inputfile':
                 self.inputArgs[key] = None
+
+            else:
+                print("Error!! Value {} for 'type' parameter is not supported! Supported values=inputfile, output".format(values['type']))
+                exit()
+
         self.inputFilesFound = False
+
 
 
         # Communication queue in order to stop the executors
@@ -157,7 +163,7 @@ class ScriptExecutorBase(ABC):
             if not self.systemCall('cp '+self.parFile+' ./'): # Copy par file into the current dir
                 break
 
-            if not self.systemCall('mkdir -p '+self.tempOutputDir): # Create temp folder for temporary output
+            if not self.systemCall('mkdir -p tmp'): # Create temp folder for temporary output
                 break
 
 
@@ -166,10 +172,10 @@ class ScriptExecutorBase(ABC):
             if not self.executeScript(): # The output files are written in a temp directory
                 break
 
-            if not self.systemCall('mv '+join(self.tempOutputDir,self.outputTempName)+' '+join(self.outputDir, str(time())+'_'+self.outputFilename)): # Move output file when the script finished
+            if not self.moveOutputFiles(): # Moving all temporary output files
                 break
 
-            if not self.systemCall('rm -r '+self.tempOutputDir): # Destroy the temp folder for temporary output
+            if not self.systemCall('rm -r tmp'): # Destroy the temp folder for temporary output
                 break
 
             if not self.systemCall('rm '+self.parFileName): # Remove the par
@@ -178,8 +184,8 @@ class ScriptExecutorBase(ABC):
 
             for input_number, input_path in self.inputArgs.items():
 
-                if self.inputSearchDict[input_number]['type'] == 'file':
-                    
+                if self.scriptInputsDict[input_number]['type'] == 'inputfile':
+
                     self.ft.consume(self.inputArgs[input_number])          # Mark the file as 'consumed'
 
                     self.inputArgs[input_number] = None                    # Clean the input files dictionary
@@ -225,7 +231,7 @@ class ScriptExecutorBase(ABC):
     # Polling
     def searchForInputFiles(self):
 
-        # inputSearchDict = {
+        # scriptInputsDict = {
         #           '1':{'type':'file', 'ext':'.lv2b', 'pattern':'', 'exludepattern':'irf', 'value':''},
         #           '2':{'type':'file', 'ext':'lv2b', 'pattern':'irf', 'exludepattern':'', 'value':''},
         #           '3':{'type':'file', 'ext':'lv0', 'pattern':'', 'exludepattern':'', 'value':''}
@@ -234,13 +240,13 @@ class ScriptExecutorBase(ABC):
         for input_number, input_path in self.inputArgs.items():
 
             # if input type is 'file'
-            if self.inputSearchDict[input_number]['type'] == 'file':
+            if self.scriptInputsDict[input_number]['type'] == 'inputfile':
 
                 # if file is not found yet
                 if input_path is None:
 
                     # search for file
-                    newFiles = self.ft.searchFile(self.inputSearchDict[input_number]['ext'], pattern = self.inputSearchDict[input_number]['pattern'], excludePattern = self.inputSearchDict[input_number]['exludepattern'])
+                    newFiles = self.ft.searchFile(self.scriptInputsDict[input_number]['ext'], pattern = self.scriptInputsDict[input_number]['pattern'], excludePattern = self.scriptInputsDict[input_number]['exludepattern'])
 
                     # take the oldest file
                     if len(newFiles) >= 1:
@@ -263,10 +269,6 @@ class ScriptExecutorBase(ABC):
             toPrint = "\nERROR!! the inputDir directory {} does not exist".format(self.inputDir)
             self.LOG(toPrint, printOnConsole = True, addErrorDecorator = True)
             return False
-        if not isdir(self.outputDir):
-            toPrint = "\nERROR!! the outputDir directory {} does not exist".format(self.outputDir)
-            self.LOG(toPrint, printOnConsole = True, addErrorDecorator = True)
-            return False
         if not exists(self.executable):
             toPrint = "\nERROR!! the executable {} does not exist".format(self.executable)
             self.LOG(toPrint, printOnConsole = True, addErrorDecorator = True)
@@ -286,7 +288,7 @@ class ScriptExecutorBase(ABC):
         self.LOG("Got stop notification from main.")
 
     def printInfo(self):
-        toPrint = "\nMy name is: {} \nI watch the dir: {}\nI look for: {}\nI run: {}\nI use {}".format(self.executorName,self.inputDir,self.inputSearchDict,self.executable, self.envVarsDict)
+        toPrint = "\nMy name is: {} \nI watch the dir: {}\nI look for: {}\nI run: {}\nI use {}".format(self.executorName,self.inputDir,self.scriptInputsDict,self.executable, self.envVarsDict)
         self.LOG(toPrint, printOnConsole = True)
 
     def LOG(self, string, printOnConsole = False, addErrorDecorator = False):
@@ -299,6 +301,19 @@ class ScriptExecutorBase(ABC):
         if printOnConsole or self.debug:
             print(string)
         self.logger.info(string)
+
+    def moveOutputFiles(self):
+        noErrors = True
+        for key,values in self.scriptInputsDict.items():
+
+            if values['type'] == 'output':
+                filename, filepath = FilesTracker.getBasenameAndFilename(values['value'])
+
+                noErrors = self.systemCall('mv '+self.inputArgs[key]+' '+join(filepath, str(time())+'_'+filename))
+                if not noErrors:
+                    break
+
+        return noErrors
 
     # Follia:
     # - Per ogni riga del par file

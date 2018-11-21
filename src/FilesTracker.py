@@ -55,6 +55,8 @@ class File():
     def __str__(self):
         return "\n"+self.filepath+self.filename+" "+str(self.file_st_mttime)+" "+str(self.consumed)
 
+
+
 class ConsumeStrategy(Enum):
     KEEP = 1
     DELETE = 2
@@ -183,6 +185,13 @@ class FilesTracker():
         for f in self.availableFiles:
             filenames.append(f)
         return filenames
+
+    @staticmethod
+    def getBasenameAndFilename(filepath):
+        filename = basename(filepath)
+        filepath = filepath.replace(filename, '')
+        return (filename, filepath)
+
 
     @staticmethod
     def silentremove(file):
