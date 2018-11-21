@@ -74,7 +74,7 @@ class ScriptExecutorBase(ABC):
         self.sleepSec = config[iniSectionName]['sleepSec']
 
         # Logging
-        logFile = join(config['GENERAL']['logDir'], config[iniSectionName]['name']+'_'+strftime("%Y-%m-%d_%H:%M:%S", gmtime())+'_log.txt')
+        logFile = join('logs', config[iniSectionName]['name']+'_'+strftime("%Y-%m-%d_%H:%M:%S", gmtime())+'_log.txt')
         self.logger = self.setupLogger(config[iniSectionName]['name'], logFile)
 
         # Env

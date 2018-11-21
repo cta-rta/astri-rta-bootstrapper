@@ -14,8 +14,8 @@ python boostrapper.py
   * It polls the input directory until it finds all the files that it needs to launch its analysis script. If there exist more than one input file of the same type, the ScriptExecutor will consume the oldest one.
   * It copies the par file within its directory.
   * It creates a temporary folder to store the temporary output of the analysis script.
-  * It executes the analysis script defining the needed environment variables.
-  * When the analysis script is terminated, it moves its temporary output to the right destination directory (there will be another ScriptExecutor polling in that directory)
+  * It defines the environment variables needed and then executes the analysis script .
+  * When the analysis script is terminated, it moves its temporary output to the destination directory (there will be another ScriptExecutor polling in that directory)
   * It deletes the par file
   * It deletes the input files or marks them as 'consumed'
   * It starts to poll again
@@ -29,9 +29,7 @@ If any system call raise any error, all the ScriptExecutors will quit, reporting
 ## Assumptions
 * All the scripts uses the PAR input sysyem.
 * All the different input files needed for the analysis script executions must be located into the same directory.
-* Each script asks where to save the output file
-
-* Each script produces only one file -> TO MODIFY!!
+* Each script asks where to save the output file (at least one file)
 
 ## Configuration file
 The configuration file has a 'general' section and one 'script-specific' section for each script.
@@ -40,7 +38,6 @@ The configuration file has a 'general' section and one 'script-specific' section
 
 ### General section
 * debug: [yes/no] [required] if yes all the logs will be output on the console
-* logDir: [required] the directory containing the log files will be created at 'logDir' path (should NOT end with '/')
 * keepInputFiles: [required] if yes the input files are not deleted once used but they remain in the input directory
 
 ### Script-specific section
@@ -56,17 +53,18 @@ For each script you want to handle, you need to write a script-specific section 
 
 * inputDir = [required] full path to the directory that contains the input files (should NOT end with '/')
 
-* scriptInputsDict = [Python dictionary] [required] Here are defined all the inputs you want to give to the script. There are two types of input: the 'file' type (the ScriptExecutor will look for it) and the 'string' type -> its value is passed through the configuration file. Each dictionary key has a incremental integer number that corrisponds to the order with wich you want to give the inputs. The corrisponding value is another python dictionary that describe the input (lets call it value-dictionary). The value-dictionary contains several parameters:
-  * type: [inputfile/output] -> if the input is type 'inputfile', it will be searched using 'ext', 'pattern' and 'excludepattern' parameters. If it is type 'output', its value is passed through the 'value' parameter.
-  * ext: file extension, must be start with '.' (e.g. .lv2b)
-  * pattern: if a 'pattern' value is provided, the ScriptExecutor will looks for a filename with extension 'ext' and containing the 'pattern' in its filename
-  * excludepattern: -> if a 'excludepattern' value is provided, the ScriptExecutor will looks for a filename with extension 'ext' and NOT containing the 'excludepattern' in its filename
+* scriptInputsDict = [Python dictionary] [required] Here are defined all the inputs you want to give to the script. There are two types of input: the 'inputfile' type (the ScriptExecutor will look for it) and the 'output' type -> its value is passed through the configuration file. Each dictionary key has a incremental integer number that corrisponds to the order with wich you want to give the inputs. The corrisponding value is another python dictionary that describe the input (lets call it value-dictionary). The value-dictionary contains several parameters:
+  * type: [inputfile/output] -> the 'inputfile' type refers to an actual file that the ScriptExecutor needs to run the script. The input file is  searched using 'ext', 'pattern' and 'excludepattern' parameters. The type 'output' refers to the filename of the analysis script output. Its value MUST be specified through the 'value' parameter.
+  * ext: file extension. You must omit the '.' (e.g. 'lv2b')
+  * pattern: if a 'pattern' string value is provided, the ScriptExecutor will looks for a filename with extension 'ext' and containing the 'pattern' in its filename
+  * excludepattern: -> if a 'excludepattern' string value is provided, the ScriptExecutor will looks for a filename with extension 'ext' and NOT containing the 'excludepattern' in its filename
   * value: the actual string value if type=output
 
 ```python
-scriptInputsDict = {'1':{'type':'file', 'ext':'.lv2a', 'pattern':'', 'exludepattern':'irf', 'value':''}, '2':{'type':'string', 'ext':'', 'pattern':'', 'exludepattern':'', 'value':'/home/cta/Baroncelli_development/astri-rta-bootstrapper/tmp/dl2b.out/astri.lv2b.tmp'}}
+scriptInputsDict = { '1':{'type':'inptufile', 'ext':'lv2a', 'pattern':'', 'exludepattern':'irf', 'value':''},
+                     '2':{'type':'output', 'ext':'', 'pattern':'', 'exludepattern':'', 'value':'/home/cta/Baroncelli_development/ASTRI_DL2/output/dl3.out/astri.out.lv3'}
+                  }
 ```
-
 
 * parFileDir = [required] full path to the directory that contains the par file (should NOT end with '/')
 * parFileName = [required] par filename
@@ -87,7 +85,6 @@ envvars = {'RTACONFIGFILE': '/home/cta/Baroncelli_development/ASTRI_DL2/RTAlib/C
 ```bash
 [GENERAL]
 debug =  ..
-logDir =  ..
 keepInputFiles = ..
 
 [script_1]
