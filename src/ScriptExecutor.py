@@ -277,6 +277,14 @@ class ScriptExecutorBase(ABC):
             toPrint = "\nERROR!! the parFile {} does not exist".format(self.parFile)
             self.LOG(toPrint, printOnConsole = True, addErrorDecorator = True)
             return False
+        for key,values in self.scriptInputsDict.items():
+            if values['type'] == 'output':
+                filename, filepath = FilesTracker.getBasenameAndFilename(values['value'])
+                if not isdir(filepath):
+                    toPrint = "\nERROR!! the outputDir directory {} does not exist".format(filepath)
+                    self.LOG(toPrint, printOnConsole = True, addErrorDecorator = True)
+                    return False
+
         return True
 
     def endJob(self):
@@ -308,7 +316,6 @@ class ScriptExecutorBase(ABC):
 
             if values['type'] == 'output':
                 filename, filepath = FilesTracker.getBasenameAndFilename(values['value'])
-
                 noErrors = self.systemCall('mv '+self.inputArgs[key]+' '+join(filepath, str(time())+'_'+filename))
                 if not noErrors:
                     break
