@@ -175,8 +175,8 @@ class ScriptExecutorBase(ABC):
             if not self.moveOutputFiles(): # Moving all temporary output files
                 break
 
-            if not self.systemCall('rm -r tmp'): # Destroy the temp folder for temporary output
-                break
+            #if not self.systemCall('rm -rf tmp/*'): # Destroy the temp folder for temporary output
+            #    break
 
             if not self.systemCall('rm '+self.parFileName): # Remove the par
                 break
@@ -184,13 +184,14 @@ class ScriptExecutorBase(ABC):
 
             for input_number, input_path in self.inputArgs.items():
 
-                if self.scriptInputsDict[input_number]['type'] == 'inputfile':
+                if self.scriptInputsDict[input_number]['type'] == 'inputfile' and self.scriptInputsDict[input_number]['useforever'] == 'no':
 
                     self.ft.consume(self.inputArgs[input_number])          # Mark the file as 'consumed'
 
                     self.inputArgs[input_number] = None                    # Clean the input files dictionary
 
-            self.inputFilesFound = False                                   # Clean bool var
+                if not self.inputArgs[input_number]:
+                    self.inputFilesFound = False                                   # Clean bool var
 
 
         self.LOG("Quitting..", printOnConsole = True)
@@ -203,6 +204,7 @@ class ScriptExecutorBase(ABC):
     # return (bool err,string command, string strout,string stderr)
     def systemCall(self, command, logOutputOnFile = False, envVars = None, shell=True):
 
+        print("Running: ", command)
         completedProcess = subprocess.run(command, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=envVars)
 
         if logOutputOnFile and completedProcess.stdout:
@@ -296,7 +298,7 @@ class ScriptExecutorBase(ABC):
         self.LOG("Got stop notification from main.")
 
     def printInfo(self):
-        toPrint = "\nMy name is: {} \nI watch the dir: {}\nI look for: {}\nI run: {}\nI use {}".format(self.executorName,self.inputDir,self.scriptInputsDict,self.executable, self.envVarsDict)
+        toPrint = "\nMy name is: {} \nI watch the dir: {}\nI look for: {}\nI run: {}\nI use {}\n Input args: {}".format(self.executorName,self.inputDir,self.scriptInputsDict,self.executable, self.envVarsDict, self.inputArgs)
         self.LOG(toPrint, printOnConsole = True)
 
     def LOG(self, string, printOnConsole = False, addErrorDecorator = False):

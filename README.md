@@ -59,9 +59,10 @@ For each script you want to handle, you need to write a script-specific section 
   * pattern: if a 'pattern' string value is provided, the ScriptExecutor will looks for a filename with extension 'ext' and containing the 'pattern' in its filename
   * excludepattern: -> if a 'excludepattern' string value is provided, the ScriptExecutor will looks for a filename with extension 'ext' and NOT containing the 'excludepattern' in its filename
   * value: the actual string value if type=output
+  * useforever: if type=inputfile, the useforever flag tells the ScriptExecutor that this input file can be reused.
 
 ```python
-scriptInputsDict = { '1':{'type':'inptufile', 'ext':'lv2a', 'pattern':'', 'exludepattern':'irf', 'value':''},
+scriptInputsDict = { '1':{'type':'inptufile', 'ext':'lv2a', 'pattern':'', 'exludepattern':'irf', 'value':'', 'useforever':'no'},
                      '2':{'type':'output', 'ext':'', 'pattern':'', 'exludepattern':'', 'value':'/home/user/pipeoutput/dl3.out/astri.out.lv3'}
                   }
 ```
