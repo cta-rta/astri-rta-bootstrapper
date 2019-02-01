@@ -24,7 +24,7 @@ from os import listdir, remove, stat, walk, errno
 from os.path import join, splitext, basename
 from enum import Enum     # for enum34, or the stdlib version
 from operator import attrgetter
-
+import re
 
 
 class File():
@@ -120,9 +120,9 @@ class FilesTracker():
 
         return file
 
-     
 
-    def searchFile(self, extension, pattern='', excludePattern='', correlatedWith=''):
+
+    def searchFile(self, extension, pattern='', excludePattern='', relatedFilename='', relatedStategy=''):
 
 
         goodFiles = []
@@ -150,10 +150,44 @@ class FilesTracker():
                 if bool(pattern) and bool(excludePattern) and pattern in filename and excludePattern not in filename:
                     good = True
 
-                if good:
+                if good and FilesTracker.isRelatedTo(f, relatedFilename, relatedStategy):
                     goodFiles.append(f)
 
         return goodFiles
+
+    @staticmethod
+    def isRelatedTo(f, relatedFilepath, relatedStategy):
+        if bool(relatedFilepath):
+            relatedFilename = basename(relatedFilepath)
+            return FilesTracker.execute_strategy(f.filename, relatedFilename, relatedStategy)
+        else:
+            return True
+
+    @staticmethod
+    def execute_strategy(f, relatedFilename, relatedStategy):
+        if relatedStategy not in ['astri_filenames_strategy']:
+            print("[FilesTracker] Error!! The strategy {} is not available!!".format(relatedStategy))
+            exit(1)
+        elif relatedStategy == 'astri_filenames_strategy':
+            return FilesTracker.astri_filenames_strategy(f, relatedFilename)
+
+    @staticmethod
+    def astri_filenames_strategy(f, relatedFilename):
+        print("F: ", f)        # astri_000_41_001_00001_R_000000_001_0601.lv0
+        print("relatedTo: ", relatedFilename)  # astri_000_41_001_00001_R_000000_001_0201.lv2b
+
+        m1 = re.search('astri_000_41_001_00001_R_(.+?)_001_', f)
+        m2 = re.search('astri_000_41_001_00001_R_(.+?)_001_', relatedFilename)
+        found1 = None
+        found2 = None
+
+        if m1: found1 = m1.group(1)
+        if m2: found2 = m2.group(1)
+
+        if found1 == found2 and found1 and found2:
+            return True
+        else:
+            return False
 
     def printFiles(self):
         for f in self.availableFiles:

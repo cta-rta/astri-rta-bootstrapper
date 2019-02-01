@@ -233,9 +233,9 @@ class ScriptExecutorBase(ABC):
     def searchForInputFiles(self):
 
         # scriptInputsDict = {
-        #           '1':{'type':'file', 'ext':'.lv2b', 'pattern':'', 'exludepattern':'irf', 'value':''},
-        #           '2':{'type':'file', 'ext':'lv2b', 'pattern':'irf', 'exludepattern':'', 'value':''},
-        #           '3':{'type':'file', 'ext':'lv0', 'pattern':'', 'exludepattern':'', 'value':''}
+        #           '1':{'type':'inputfile', 'ext':'lv2b', 'pattern':'', 'exludepattern':'irf', 'value':'', 'useforever':'no', 'relatedTo' : ''},
+        #           '2':{'type':'inputfile', 'ext':'lv2b', 'pattern':'irf', 'exludepattern':'', 'value':'', 'useforever':'yes', 'relatedTo' : ''},
+        #           '3':{'type':'inputfile', 'ext':'lv0',  'pattern':'', 'exludepattern':'', 'value':'', 'useforever':'no', 'relatedTo' : '1'},
         # }
 
         for input_number, input_path in self.inputArgs.items():
@@ -246,8 +246,18 @@ class ScriptExecutorBase(ABC):
                 # if file is not found yet
                 if input_path is None:
 
-                    # search for file
-                    newFiles = self.ft.searchFile(self.scriptInputsDict[input_number]['ext'], pattern = self.scriptInputsDict[input_number]['pattern'], excludePattern = self.scriptInputsDict[input_number]['exludepattern'])
+                    newFiles = []
+
+                    relatedFilename = ''
+                    relatedToIndex = self.scriptInputsDict[input_number]['relatedTo']
+                    relatedStategy = self.scriptInputsDict[input_number]['relatedStategy']
+                    canSearchRelated = False
+                    if bool(relatedToIndex) and bool(self.inputArgs[relatedToIndex]):
+                        relatedFilename = self.inputArgs[relatedToIndex]
+                        canSearchRelated = True
+
+                    if not bool(relatedToIndex) or canSearchRelated:
+                        newFiles = self.ft.searchFile(self.scriptInputsDict[input_number]['ext'], pattern = self.scriptInputsDict[input_number]['pattern'], excludePattern = self.scriptInputsDict[input_number]['exludepattern'], relatedFilename = relatedFilename, relatedStategy = relatedStategy)
 
                     # take the oldest file
                     if len(newFiles) >= 1:
@@ -332,7 +342,7 @@ class ScriptExecutorBase(ABC):
                     filename = splitext(father_filename)[0]
                     filename = filename+'.'+values['output_exe']
 
-                filename = "astri_bootstrapper_"+filename
+
                 noErrors = self.systemCall('mv '+self.inputArgs[key]+' '+join(filepath, filename))
                 if not noErrors:
                     break
