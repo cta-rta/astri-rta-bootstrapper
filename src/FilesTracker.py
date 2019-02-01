@@ -120,7 +120,10 @@ class FilesTracker():
 
         return file
 
-    def searchFile(self, extension, pattern='', excludePattern=''):
+     
+
+    def searchFile(self, extension, pattern='', excludePattern='', correlatedWith=''):
+
 
         goodFiles = []
 

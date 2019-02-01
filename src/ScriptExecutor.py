@@ -24,7 +24,7 @@ import configparser
 from abc import ABC, abstractmethod
 from os.path import isdir
 from os import listdir, system
-from os.path import join, exists
+from os.path import join, exists, splitext
 from time import sleep, gmtime, strftime, time
 from threading import Thread
 import subprocess
@@ -93,8 +93,7 @@ class ScriptExecutorBase(ABC):
         for key,values in self.scriptInputsDict.items():
 
             if values['type'] == 'output':
-                filename,filepath = FilesTracker.getBasenameAndFilename(values['value'])
-                self.inputArgs[key] = 'tmp/'+filename+'_tmp'
+                self.inputArgs[key] = 'tmp/'+key+'_'+values['output_exe']+'_tmp'
 
             elif values['type'] == 'inputfile':
                 self.inputArgs[key] = None
@@ -281,9 +280,8 @@ class ScriptExecutorBase(ABC):
             return False
         for key,values in self.scriptInputsDict.items():
             if values['type'] == 'output':
-                filename, filepath = FilesTracker.getBasenameAndFilename(values['value'])
-                if not isdir(filepath):
-                    toPrint = "\nERROR!! the outputDir directory {} does not exist".format(filepath)
+                if not isdir(values['output_dir']):
+                    toPrint = "\nERROR!! the outputDir directory {} does not exist".format(values['output_dir'])
                     self.LOG(toPrint, printOnConsole = True, addErrorDecorator = True)
                     return False
 
@@ -317,8 +315,19 @@ class ScriptExecutorBase(ABC):
         for key,values in self.scriptInputsDict.items():
 
             if values['type'] == 'output':
-                filename, filepath = FilesTracker.getBasenameAndFilename(values['value'])
-                noErrors = self.systemCall('mv '+self.inputArgs[key]+' '+join(filepath, str(time())+'_'+filename))
+
+                filepath = values['output_dir']
+                filename = ''
+                if values['filenameRelatedTo'] == 'null':
+                    filename = values['filename']+'.'+values['output_exe']
+                else:
+                    relatedToIndex = values['filenameRelatedTo']
+                    father_filename, father_filepath = FilesTracker.getBasenameAndFilename(self.inputArgs[relatedToIndex])
+                    filename = splitext(father_filename)[0]
+                    filename = filename+'.'+values['output_exe']
+
+                filename = "astri_bootstrapper_"+filename                        
+                noErrors = self.systemCall('mv '+self.inputArgs[key]+' '+join(filepath, filename))
                 if not noErrors:
                     break
 

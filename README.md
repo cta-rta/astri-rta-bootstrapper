@@ -54,12 +54,20 @@ For each script you want to handle, you need to write a script-specific section 
 * inputDir = [required] full path to the directory that contains the input files (should NOT end with '/')
 
 * scriptInputsDict = [Python dictionary] [required] Here are defined all the inputs you want to give to the script. There are two types of input: the 'inputfile' type (the ScriptExecutor will look for it) and the 'output' type -> its value is passed through the configuration file. Each dictionary key has a incremental integer number that corrisponds to the order with wich you want to give the inputs. The corrisponding value is another python dictionary that describe the input (lets call it value-dictionary). The value-dictionary contains several parameters:
-  * type: [inputfile/output] -> the 'inputfile' type refers to an actual file that the ScriptExecutor needs to run the script. The input file is  searched using 'ext', 'pattern' and 'excludepattern' parameters. The type 'output' refers to the filename of the analysis script output. Its value MUST be specified through the 'value' parameter.
-  * ext: file extension. You must omit the '.' (e.g. 'lv2b')
-  * pattern: if a 'pattern' string value is provided, the ScriptExecutor will looks for a filename with extension 'ext' and containing the 'pattern' in its filename
-  * excludepattern: -> if a 'excludepattern' string value is provided, the ScriptExecutor will looks for a filename with extension 'ext' and NOT containing the 'excludepattern' in its filename
-  * value: the actual string value if type=output
-  * useforever: if type=inputfile, the useforever flag tells the ScriptExecutor that this input file can be reused.
+  * type: [inputfile/output]
+    * the 'inputfile' type refers to an actual file that the ScriptExecutor needs to run the script. The input file is  searched using 'ext', 'pattern' and 'excludepattern' parameters.
+    * The type 'output' refers to the filename of the analysis script output. Its value MUST be specified through the 'value' parameter.
+  * type : inputfile
+    * ext: file extension. You must omit the '.' (e.g. 'lv2b')
+    * pattern: if a 'pattern' string value is provided, the ScriptExecutor will looks for a filename with extension 'ext' and containing the 'pattern' in its filename
+    * excludepattern: -> if a 'excludepattern' string value is provided, the ScriptExecutor will looks for a filename with extension 'ext' and NOT containing the 'excludepattern' in its filename
+    * useforever: if type=inputfile, the useforever flag tells the ScriptExecutor that this input file can be reused.
+    * relatedTo: the relatedTo parameter specifies that the file is related to another parent file for example through the father's filename id.
+  * type : output
+    * output_dir: the output folder
+    * output_exe: the extension of the output file
+    * filenameRelatedTo: if set, the filename is taken from the related input file.
+    * filename: if the filenameRelatedTo is null, is possibile to specify a filename for the output file.
 
 ```python
 scriptInputsDict = { '1':{'type':'inptufile', 'ext':'lv2a', 'pattern':'', 'exludepattern':'irf', 'value':'', 'useforever':'no'},
