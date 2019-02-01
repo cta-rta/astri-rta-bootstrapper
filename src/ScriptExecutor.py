@@ -254,7 +254,7 @@ class ScriptExecutorBase(ABC):
                         oldestFile = self.ft.getOldestFile(newFiles)
                         self.inputArgs[input_number] = oldestFile.filefullpath
 
-        self.LOG("{}".format(self.inputArgs), printOnConsole = True)
+        self.LOG("\n{\n" + "\n".join("{}: {}".format(k, v) for k, v in self.inputArgs.items()) + "\n}", printOnConsole = True)
 
 
 
@@ -296,7 +296,13 @@ class ScriptExecutorBase(ABC):
         self.LOG("Got stop notification from main.")
 
     def printInfo(self):
-        toPrint = "\nMy name is: {} \nI watch the dir: {}\nI look for: {}\nI run: {}\nI use {}\n Input args: {}".format(self.executorName,self.inputDir,self.scriptInputsDict,self.executable, self.envVarsDict, self.inputArgs)
+        toPrint = "\nMy name is: "+str(self.executorName)+ "\
+                   \nI watch the dir: "+str(self.inputDir)+ "\
+                   \nI look for: \n{\n" + "\n".join("{}: {}".format(k, v) for k, v in self.scriptInputsDict.items()) + "\n} \
+                   \nI run: "+str(self.executable)+ "\
+                   \nI use: \n{\n" + "\n".join("{}: {}".format(k, v) for k, v in self.envVarsDict.items()) + "\n} \
+                   \n Input args: \n{\n" + "\n".join("{}: {}".format(k, v) for k, v in self.inputArgs.items()) + "\n} "
+
         self.LOG(toPrint, printOnConsole = True)
 
     def LOG(self, string, printOnConsole = False, addErrorDecorator = False):
@@ -326,7 +332,7 @@ class ScriptExecutorBase(ABC):
                     filename = splitext(father_filename)[0]
                     filename = filename+'.'+values['output_exe']
 
-                filename = "astri_bootstrapper_"+filename                        
+                filename = "astri_bootstrapper_"+filename
                 noErrors = self.systemCall('mv '+self.inputArgs[key]+' '+join(filepath, filename))
                 if not noErrors:
                     break
