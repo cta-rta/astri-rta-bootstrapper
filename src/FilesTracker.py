@@ -173,8 +173,6 @@ class FilesTracker():
 
     @staticmethod
     def astri_filenames_strategy(f, relatedFilename):
-        print("F: ", f)        # astri_000_41_001_00001_R_000000_001_0601.lv0
-        print("relatedTo: ", relatedFilename)  # astri_000_41_001_00001_R_000000_001_0201.lv2b
 
         m1 = re.search('astri_000_41_001_00001_R_(.+?)_001_', f)
         m2 = re.search('astri_000_41_001_00001_R_(.+?)_001_', relatedFilename)
